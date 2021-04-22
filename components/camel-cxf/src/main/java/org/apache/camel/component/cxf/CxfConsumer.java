@@ -113,7 +113,7 @@ public class CxfConsumer extends DefaultConsumer implements Suspendable {
         if (server != null) {
             boolean serverWasStarted = server.isStarted();
             server.stop();
-            if(serverWasStarted){
+            if (serverWasStarted) {
                 server.destroy();
             }
             server = null;
