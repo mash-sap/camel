@@ -20,6 +20,7 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -48,9 +49,11 @@ import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.platform.http.HttpEndpointModel;
 import org.apache.camel.component.platform.http.PlatformHttpComponent;
 import org.apache.camel.component.platform.http.spi.Method;
+import org.apache.camel.component.platform.http.spi.PlatformHttpEngine;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.model.rest.RestBindingMode;
 import org.apache.camel.model.rest.RestParamType;
+import org.apache.camel.spi.EmbeddedHttpService;
 import org.apache.camel.spi.RestConfiguration;
 import org.apache.camel.support.jsse.KeyManagersParameters;
 import org.apache.camel.support.jsse.KeyStoreParameters;
@@ -58,6 +61,7 @@ import org.apache.camel.support.jsse.SSLContextParameters;
 import org.apache.camel.support.jsse.SSLContextServerParameters;
 import org.apache.camel.support.jsse.TrustManagersParameters;
 import org.apache.camel.test.AvailablePortFinder;
+import org.apache.hc.client5.http.utils.Base64;
 import org.hamcrest.Matcher;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -170,6 +174,12 @@ public class VertxPlatformHttpEngineTest {
             assertEquals("/get", it.next().getUri());
             assertEquals("/post", it.next().getUri());
 
+            // should find engine in registry
+            assertNotNull(context.getRegistry().findSingleByType(PlatformHttpEngine.class));
+            EmbeddedHttpService server = context.getRegistry().findSingleByType(EmbeddedHttpService.class);
+            assertNotNull(server);
+            assertEquals("http", server.getScheme());
+            assertEquals(RestAssured.port, server.getServerPort());
         } finally {
             context.stop();
         }
@@ -375,6 +385,7 @@ public class VertxPlatformHttpEngineTest {
 
     @Test
     public void testFileUpload() throws Exception {
+        final String attachmentId = "myTestFile";
         final String fileContent = "Test multipart upload content";
         final File tempFile = File.createTempFile("platform-http", ".txt");
         final CamelContext context = createCamelContext(configuration -> {
@@ -395,7 +406,7 @@ public class VertxPlatformHttpEngineTest {
                     from("platform-http:/upload")
                             .process(exchange -> {
                                 AttachmentMessage message = exchange.getMessage(AttachmentMessage.class);
-                                DataHandler attachment = message.getAttachment(tempFile.getName());
+                                DataHandler attachment = message.getAttachment(attachmentId);
                                 message.setBody(attachment.getContent());
                             });
                 }
@@ -404,7 +415,7 @@ public class VertxPlatformHttpEngineTest {
             context.start();
 
             given()
-                    .multiPart(tempFile)
+                    .multiPart(attachmentId, tempFile)
                     .when()
                     .post("/upload")
                     .then()
@@ -574,7 +585,8 @@ public class VertxPlatformHttpEngineTest {
                 from("platform-http:/secure")
                         .process(exchange -> {
                             Message message = exchange.getMessage();
-                            message.setBody("Secure Route");
+                            message.setBody("Received message with the Authorization="
+                                            + exchange.getMessage().getHeader("Authorization"));
 
                             User user = message.getHeader(VertxPlatformHttpConstants.AUTHENTICATED_USER, User.class);
                             assertThat(user).isNotNull();
@@ -604,9 +616,8 @@ public class VertxPlatformHttpEngineTest {
                     .get("/secure")
                     .then()
                     .statusCode(200)
-                    .header("Authorization", notNullValue())
-                    .body(is("Secure Route"));
-
+                    .body(is("Received message with the Authorization=Basic "
+                             + Base64.encodeBase64String("camel:s3cr3t".getBytes())));
         } finally {
             context.stop();
             vertx.close();
@@ -1014,6 +1025,54 @@ public class VertxPlatformHttpEngineTest {
                     .header("set-cookie", "XSRF-TOKEN=88533580000c314; Path=/")
                     .body(equalTo("replace"));
 
+        } finally {
+            context.stop();
+        }
+    }
+
+    @Test
+    public void testResponseTypeConversionErrorHandled() throws Exception {
+        final CamelContext context = createCamelContext();
+
+        try {
+            context.addRoutes(new RouteBuilder() {
+                @Override
+                public void configure() {
+                    from("platform-http:/error/response")
+                            // Set the response to something that can't be type converted
+                            .setBody().constant(Collections.EMPTY_SET);
+                }
+            });
+
+            context.start();
+
+            get("/error/response")
+                    .then()
+                    .statusCode(500);
+        } finally {
+            context.stop();
+        }
+    }
+
+    @Test
+    public void testResponseBadQueryParamErrorHandled() throws Exception {
+        final CamelContext context = createCamelContext();
+
+        try {
+            context.addRoutes(new RouteBuilder() {
+                @Override
+                public void configure() {
+                    from("platform-http:/error/response")
+                            .setBody().constant("Error");
+                }
+            });
+
+            context.start();
+
+            // Add a query param that Vert.x cannot handle
+            get("/error/response?::")
+                    .then()
+                    .statusCode(500);
         } finally {
             context.stop();
         }

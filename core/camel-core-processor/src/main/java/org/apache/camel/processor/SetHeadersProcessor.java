@@ -28,7 +28,7 @@ import org.apache.camel.spi.RouteIdAware;
 import org.apache.camel.support.AsyncProcessorSupport;
 
 /**
- * A processor which sets multipe headers on the IN or OUT message with an {@link org.apache.camel.Expression}
+ * A processor which sets multiple headers on the IN or OUT message with an {@link org.apache.camel.Expression}
  */
 public class SetHeadersProcessor extends AsyncProcessorSupport implements Traceable, IdAware, RouteIdAware {
     private String id;
@@ -73,7 +73,8 @@ public class SetHeadersProcessor extends AsyncProcessorSupport implements Tracea
 
     @Override
     public String getTraceLabel() {
-        StringBuilder sb = new StringBuilder("setHeaders[");
+        StringBuilder sb = new StringBuilder(256);
+        sb.append("setHeaders[");
         int headerIndex = 0;
         for (Expression expression : expressions) {
             if (headerIndex > 0) {

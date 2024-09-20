@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,7 +64,7 @@ import org.apache.camel.spi.ManagementStrategy;
 import org.apache.camel.spi.RoutePolicy;
 import org.apache.camel.support.PluginHelper;
 import org.apache.camel.util.ObjectHelper;
-import org.apache.camel.xml.jaxb.JaxbHelper;
+import org.apache.camel.xml.LwModelHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -127,6 +128,16 @@ public class ManagedRoute extends ManagedPerformanceCounter implements TimerList
     @Override
     public String getRouteGroup() {
         return route.getGroup();
+    }
+
+    @Override
+    public boolean isCreatedByRouteTemplate() {
+        return "true".equals(route.getProperties().getOrDefault(Route.TEMPLATE_PROPERTY, "false"));
+    }
+
+    @Override
+    public boolean isCreatedByKamelet() {
+        return "true".equals(route.getProperties().getOrDefault(Route.KAMELET_PROPERTY, "false"));
     }
 
     @Override
@@ -309,7 +320,12 @@ public class ManagedRoute extends ManagedPerformanceCounter implements TimerList
         if (!context.getStatus().isStarted()) {
             throw new IllegalArgumentException("CamelContext is not started");
         }
-        context.getRouteController().startRoute(getRouteId());
+        try {
+            context.getRouteController().startRoute(getRouteId());
+        } catch (Exception e) {
+            LOG.warn("Error starting route: {} due to: {}. This exception is ignored.", getRouteId(), e.getMessage(), e);
+            throw e;
+        }
     }
 
     @Override
@@ -317,7 +333,12 @@ public class ManagedRoute extends ManagedPerformanceCounter implements TimerList
         if (!context.getStatus().isStarted()) {
             throw new IllegalArgumentException("CamelContext is not started");
         }
-        context.getRouteController().stopRoute(getRouteId());
+        try {
+            context.getRouteController().stopRoute(getRouteId());
+        } catch (Exception e) {
+            LOG.warn("Error stopping route: {} due to: {}. This exception is ignored.", getRouteId(), e.getMessage(), e);
+            throw e;
+        }
     }
 
     @Override
@@ -345,6 +366,10 @@ public class ManagedRoute extends ManagedPerformanceCounter implements TimerList
         return context.getRouteController().stopRoute(getRouteId(), timeout, TimeUnit.SECONDS, abortAfterTimeout);
     }
 
+    /**
+     * @deprecated not in use
+     */
+    @Deprecated(since = "4.8.0")
     public void shutdown() throws Exception {
         if (!context.getStatus().isStarted()) {
             throw new IllegalArgumentException("CamelContext is not started");
@@ -354,6 +379,10 @@ public class ManagedRoute extends ManagedPerformanceCounter implements TimerList
         context.removeRoute(routeId);
     }
 
+    /**
+     * @deprecated not in use
+     */
+    @Deprecated(since = "4.8.0")
     public void shutdown(long timeout) throws Exception {
         if (!context.getStatus().isStarted()) {
             throw new IllegalArgumentException("CamelContext is not started");
@@ -687,7 +716,7 @@ public class ManagedRoute extends ManagedPerformanceCounter implements TimerList
         // convert to model from xml
         ExtendedCamelContext ecc = context.getCamelContextExtension();
         InputStream is = context.getTypeConverter().convertTo(InputStream.class, xml);
-        RoutesDefinition routes = JaxbHelper.loadRoutesDefinition(context, is);
+        RoutesDefinition routes = LwModelHelper.loadRoutesDefinition(is);
         if (routes == null || routes.getRoutes().isEmpty()) {
             return;
         }
@@ -721,6 +750,14 @@ public class ManagedRoute extends ManagedPerformanceCounter implements TimerList
         // check whether this is allowed
         Boolean enabled = context.getManagementStrategy().getManagementAgent().getUpdateRouteEnabled();
         return enabled != null ? enabled : false;
+    }
+
+    @Override
+    public boolean isRemoteEndpoint() {
+        if (route.getEndpoint() != null) {
+            return route.getEndpoint().isRemote();
+        }
+        return false;
     }
 
     @Override
@@ -795,6 +832,11 @@ public class ManagedRoute extends ManagedPerformanceCounter implements TimerList
                 @Override
                 public Throwable getException() {
                     return error.getException();
+                }
+
+                @Override
+                public Date getDate() {
+                    return error.getDate();
                 }
             };
         }

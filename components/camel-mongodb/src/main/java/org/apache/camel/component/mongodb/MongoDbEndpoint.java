@@ -35,6 +35,7 @@ import org.apache.camel.Category;
 import org.apache.camel.Consumer;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
+import org.apache.camel.spi.EndpointServiceLocation;
 import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.UriEndpoint;
 import org.apache.camel.spi.UriParam;
@@ -60,7 +61,7 @@ import static org.apache.camel.component.mongodb.MongoDbOutputType.MongoIterable
  */
 @UriEndpoint(firstVersion = "2.19.0", scheme = "mongodb", title = "MongoDB", syntax = "mongodb:connectionBean",
              category = { Category.DATABASE }, headersClass = MongoDbConstants.class)
-public class MongoDbEndpoint extends DefaultEndpoint {
+public class MongoDbEndpoint extends DefaultEndpoint implements EndpointServiceLocation {
 
     private static final Logger LOG = LoggerFactory.getLogger(MongoDbEndpoint.class);
 
@@ -187,7 +188,7 @@ public class MongoDbEndpoint extends DefaultEndpoint {
     private boolean loadBalanced;
     //additional properties
     @UriParam(description = "Set the whole Connection String/Uri for mongodb endpoint.",
-              label = "additional", defaultValue = "null")
+              label = "common")
     private String connectionUriString;
 
     // tailable cursor consumer by default
@@ -203,6 +204,29 @@ public class MongoDbEndpoint extends DefaultEndpoint {
 
     public MongoDbEndpoint(String uri, MongoDbComponent component) {
         super(uri, component);
+    }
+
+    @Override
+    public String getServiceUrl() {
+        if (connectionUriString != null) {
+            return connectionUriString;
+        } else if (hosts != null) {
+            return hosts;
+        }
+        return null;
+    }
+
+    @Override
+    public String getServiceProtocol() {
+        return "mongodb";
+    }
+
+    @Override
+    public Map<String, String> getServiceMetadata() {
+        if (username != null) {
+            return Map.of("username", username);
+        }
+        return null;
     }
 
     @Override
@@ -500,7 +524,7 @@ public class MongoDbEndpoint extends DefaultEndpoint {
     }
 
     /**
-     * Create collection during initialisation if it doesn't exist. Default is true.
+     * Create the collection during initialisation if it doesn't exist. Default is true.
      *
      * @param createCollection true or false
      */
@@ -548,7 +572,7 @@ public class MongoDbEndpoint extends DefaultEndpoint {
      * Reserved for future use, when more consumer types are supported.
      *
      * @param  dbConsumerType        key of the consumer type
-     * @throws CamelMongoDbException if consumer type is not supported
+     * @throws CamelMongoDbException if the consumer type is not supported
      */
     public void setDbConsumerType(String dbConsumerType) throws CamelMongoDbException {
         try {
@@ -579,8 +603,8 @@ public class MongoDbEndpoint extends DefaultEndpoint {
 
     /**
      * Indicates what database the tail tracking mechanism will persist to. If not specified, the current database will
-     * be picked by default. Dynamicity will not be taken into account even if enabled, i.e. the tail tracking database
-     * will not vary past endpoint initialisation.
+     * be picked by default. Dynamicity will not be taken into account even if enabled, i.e., the tail tracking database
+     * will not vary past endpoint initialization.
      *
      * @param tailTrackDb database name
      */
@@ -707,7 +731,7 @@ public class MongoDbEndpoint extends DefaultEndpoint {
     }
 
     /**
-     * Convert the output of the producer to the selected type : DocumentList Document or MongoIterable. DocumentList or
+     * Convert the output of the producer to the selected type: DocumentList Document or MongoIterable. DocumentList or
      * MongoIterable applies to findAll and aggregate. Document applies to all other operations.
      *
      * @param outputType
@@ -820,8 +844,8 @@ public class MongoDbEndpoint extends DefaultEndpoint {
     }
 
     /**
-     * Host address of mongodb server in `[host]:[port]` format. It's possible also use more than one address, as comma
-     * separated list of hosts: `[host1]:[port1],[host2]:[port2]`. If the hosts parameter is specified, the provided
+     * Host address of mongodb server in `[host]:[port]` format. It's possible to also use more than one address, as a
+     * comma separated list of hosts: `[host1]:[port1],[host2]:[port2]`. If this parameter is specified, the provided
      * connectionBean is ignored.
      *
      * @param hosts
@@ -874,7 +898,7 @@ public class MongoDbEndpoint extends DefaultEndpoint {
     /**
      * heartbeatFrequencyMS controls when the driver checks the state of the MongoDB deployment. Specify the interval
      * (in milliseconds) between checks, counted from the end of the previous check until the beginning of the next one.
-     * Default: Single-threaded drivers: 60 seconds. Multi-threaded drivers: 10 seconds.
+     * Default: Single-threaded drivers: 60 seconds. Multithreaded drivers: 10 seconds.
      *
      * @param heartbeatFrequencyMS
      */
@@ -1043,10 +1067,10 @@ public class MongoDbEndpoint extends DefaultEndpoint {
 
     /**
      * A representation of a tag set as a comma-separated list of colon-separated key-value pairs, e.g. "dc:ny,rack:1".
-     * Spaces are stripped from beginning and end of all keys and values. To specify a list of tag sets, using multiple
-     * readPreferenceTags, e.g. readPreferenceTags=dc:ny,rack:1;readPreferenceTags=dc:ny;readPreferenceTags= Note the
-     * empty value for the last one, which means match any secondary as a last resort. Order matters when using multiple
-     * readPreferenceTags.
+     * Spaces are stripped from the beginning and end of all keys and values. To specify a list of tag sets, using
+     * multiple readPreferenceTags, e.g., readPreferenceTags=dc:ny,rack:1;readPreferenceTags=dc:ny;readPreferenceTags=
+     * Note the empty value for the last one, which means match any secondary as a last resort. Order matters when using
+     * multiple readPreferenceTags.
      *
      * @param readPreferenceTags
      */

@@ -51,6 +51,13 @@ public abstract class BaseJettyTest extends CamelTestSupport {
         runningTests.remove(getClass().getName());
     }
 
+    // Due to CAMEL-21122 ports are never released. So, force them to be released.
+    @AfterEach
+    void cleanupPorts() {
+        port1.release();
+        port2.release();
+    }
+
     @Override
     protected CamelContext createCamelContext() throws Exception {
         CamelContext context = super.createCamelContext();
@@ -61,8 +68,8 @@ public abstract class BaseJettyTest extends CamelTestSupport {
     @BindToRegistry("prop")
     public Properties loadProp() {
         Properties prop = new Properties();
-        prop.setProperty("port", "" + getPort());
-        prop.setProperty("port2", "" + getPort2());
+        prop.setProperty("port", Integer.toString(getPort()));
+        prop.setProperty("port2", Integer.toString(getPort2()));
         return prop;
     }
 

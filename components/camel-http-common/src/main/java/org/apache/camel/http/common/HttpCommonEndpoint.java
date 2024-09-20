@@ -22,6 +22,7 @@ import java.util.Map;
 import org.apache.camel.cloud.DiscoverableService;
 import org.apache.camel.cloud.ServiceDefinition;
 import org.apache.camel.http.base.cookie.CookieHandler;
+import org.apache.camel.spi.EndpointServiceLocation;
 import org.apache.camel.spi.HeaderFilterStrategy;
 import org.apache.camel.spi.HeaderFilterStrategyAware;
 import org.apache.camel.spi.Metadata;
@@ -30,7 +31,8 @@ import org.apache.camel.spi.UriPath;
 import org.apache.camel.support.DefaultEndpoint;
 import org.apache.camel.util.CollectionHelper;
 
-public abstract class HttpCommonEndpoint extends DefaultEndpoint implements HeaderFilterStrategyAware, DiscoverableService {
+public abstract class HttpCommonEndpoint extends DefaultEndpoint
+        implements HeaderFilterStrategyAware, DiscoverableService, EndpointServiceLocation {
 
     // Note: all options must be documented with description in annotations so extended components can access the documentation
 
@@ -41,7 +43,7 @@ public abstract class HttpCommonEndpoint extends DefaultEndpoint implements Head
     URI httpUri;
     @UriParam(label = "common,advanced",
               description = "To use a custom HeaderFilterStrategy to filter header to and from Camel message.")
-    HeaderFilterStrategy headerFilterStrategy = new HttpHeaderFilterStrategy();
+    HeaderFilterStrategy headerFilterStrategy = new org.apache.camel.http.base.HttpHeaderFilterStrategy();
     @UriParam(label = "common,advanced",
               description = "To use a custom HttpBinding to control the mapping between Camel message and HttpClient.")
     HttpBinding httpBinding;
@@ -65,17 +67,16 @@ public abstract class HttpCommonEndpoint extends DefaultEndpoint implements Head
               description = "If this option is false the Servlet will disable the HTTP streaming and set the content-length header on the response")
     boolean chunked = true;
     @UriParam(label = "common",
-              description = "Determines whether or not the raw input stream from Servlet is cached or not"
-                            + " (Camel will read the stream into a in memory/overflow to file, Stream caching) cache."
-                            + " By default Camel will cache the Servlet input stream to support reading it multiple times to ensure it Camel"
+              description = "Determines whether or not the raw input stream is cached or not."
+                            + " The Camel consumer (camel-servlet, camel-jetty etc.) will by default cache the input stream to support reading it multiple times to ensure it Camel"
                             + " can retrieve all data from the stream. However you can set this option to true when you for example need"
                             + " to access the raw stream, such as streaming it directly to a file or other persistent store."
                             + " DefaultHttpBinding will copy the request input stream into a stream cache and put it into message body"
                             + " if this option is false to support reading the stream multiple times."
                             + " If you use Servlet to bridge/proxy an endpoint then consider enabling this option to improve performance,"
                             + " in case you do not need to read the message payload multiple times."
-                            + " The http producer will by default cache the response body stream. If setting this option to true,"
-                            + " then the producers will not cache the response body stream but use the response stream as-is as the message body.")
+                            + " The producer (camel-http) will by default cache the response body stream. If setting this option to true,"
+                            + " then the producers will not cache the response body stream but use the response stream as-is (the stream can only be read once) as the message body.")
     boolean disableStreamCache;
     @UriParam(label = "common",
               description = "If enabled and an Exchange failed processing on the consumer side, and if the caused Exception was send back serialized"
@@ -159,6 +160,8 @@ public abstract class HttpCommonEndpoint extends DefaultEndpoint implements Head
     private String oauth2ClientSecret;
     @UriParam(label = "producer,security", description = "OAuth2 Token endpoint")
     private String oauth2TokenEndpoint;
+    @UriParam(label = "producer,security", description = "OAuth2 scope")
+    private String oauth2Scope;
     @UriParam(label = "producer,security", description = "Authentication domain to use with NTML")
     private String authDomain;
     @UriParam(label = "producer,security", description = "Authentication host to use with NTML")
@@ -191,6 +194,22 @@ public abstract class HttpCommonEndpoint extends DefaultEndpoint implements Head
         super(endPointURI, component);
         this.component = component;
         this.httpUri = httpURI;
+    }
+
+    @Override
+    public String getServiceUrl() {
+        if (httpUri != null) {
+            return httpUri.toString();
+        }
+        return null;
+    }
+
+    @Override
+    public String getServiceProtocol() {
+        if (httpUri != null) {
+            return httpUri.getScheme();
+        }
+        return null;
     }
 
     public void connect(HttpConsumer consumer) throws Exception {
@@ -814,4 +833,14 @@ public abstract class HttpCommonEndpoint extends DefaultEndpoint implements Head
         this.oauth2TokenEndpoint = oauth2TokenEndpoint;
     }
 
+    public String getOauth2Scope() {
+        return oauth2Scope;
+    }
+
+    /**
+     * OAuth2 scope
+     */
+    public void setOauth2Scope(String oauth2Scope) {
+        this.oauth2Scope = oauth2Scope;
+    }
 }

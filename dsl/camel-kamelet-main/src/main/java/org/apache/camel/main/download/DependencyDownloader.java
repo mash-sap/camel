@@ -49,12 +49,12 @@ public interface DependencyDownloader extends CamelContextAware, StaticService {
      */
     void addArtifactDownloadListener(ArtifactDownloadListener downloadListener);
 
-    String getRepos();
+    String getRepositories();
 
     /**
      * Additional maven repositories for download on-demand (Use commas to separate multiple repositories).
      */
-    void setRepos(String repos);
+    void setRepositories(String repositories);
 
     /**
      * Whether downloading from remote Maven repositories is enabled
@@ -86,6 +86,26 @@ public interface DependencyDownloader extends CamelContextAware, StaticService {
      * Configure location of Maven settings-security.xml file
      */
     void setMavenSettingsSecurity(String mavenSettingsSecurity);
+
+    /**
+     * Whether downloading JARs from Maven Central repository is enabled
+     */
+    boolean isMavenCentralEnabled();
+
+    /**
+     * Whether downloading JARs from Maven Central repository is enabled
+     */
+    void setMavenCentralEnabled(boolean mavenCentralEnabled);
+
+    /**
+     * Whether downloading JARs from ASF Maven Snapshot repository is enabled
+     */
+    boolean isMavenApacheSnapshotEnabled();
+
+    /**
+     * Whether downloading JARs from ASF Maven Snapshot repository is enabled
+     */
+    void setMavenApacheSnapshotEnabled(boolean mavenApacheSnapshotEnabled);
 
     /**
      * Downloads the dependency incl transitive dependencies

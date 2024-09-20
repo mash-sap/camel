@@ -66,7 +66,7 @@ public class ValidatorEndpoint extends DefaultEndpoint {
     private LSResourceResolver resourceResolver;
     @UriParam(label = "advanced",
               description = "To use a custom LSResourceResolver which depends on a dynamic endpoint resource URI. " + //
-                            "The default resource resolver factory resturns a resource resolver which can read files from the class path and file system. Do not use together with resourceResolver.")
+                            "The default resource resolver factory returns a resource resolver which can read files from the class path and file system. Do not use together with resourceResolver.")
     private ValidatorResourceResolverFactory resourceResolverFactory;
     @UriParam(defaultValue = "true", description = "Whether to fail if no body exists.")
     private boolean failOnNullBody = true;
@@ -90,6 +90,11 @@ public class ValidatorEndpoint extends DefaultEndpoint {
         super(endpointUri, component);
         this.resourceUri = resourceUri;
         schemaReader = new SchemaReader(getCamelContext(), resourceUri);
+    }
+
+    @Override
+    public boolean isRemote() {
+        return false;
     }
 
     @ManagedOperation(description = "Clears the cached schema, forcing to re-load the schema on next request")

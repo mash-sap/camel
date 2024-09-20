@@ -98,6 +98,7 @@ public class ObjectHelperTest {
         assertEquals("cheese", name, "Property name");
     }
 
+    @SuppressWarnings("Unused")
     public void setCheese(String cheese) {
         // used in the above unit test
     }
@@ -1060,12 +1061,12 @@ public class ObjectHelperTest {
     void testAsList() {
         List<Object> out0 = org.apache.camel.util.ObjectHelper.asList(null);
         assertNotNull(out0);
-        boolean b2 = out0.size() == 0;
+        boolean b2 = out0.isEmpty();
         assertTrue(b2);
 
         List<Object> out1 = org.apache.camel.util.ObjectHelper.asList(new Object[0]);
         assertNotNull(out1);
-        boolean b1 = out1.size() == 0;
+        boolean b1 = out1.isEmpty();
         assertTrue(b1);
 
         String[] args = new String[] { "foo", "bar" };
@@ -1146,5 +1147,19 @@ public class ObjectHelperTest {
         Assertions.assertNull(list.get(50));
         Assertions.assertNull(list.get(98));
         Assertions.assertEquals("zzz", list.get(99));
+    }
+
+    @Test
+    public void testIsNumeric() {
+        Assertions.assertTrue(org.apache.camel.util.ObjectHelper.isNumericType(int.class));
+        Assertions.assertTrue(org.apache.camel.util.ObjectHelper.isNumericType(Integer.class));
+        Assertions.assertTrue(org.apache.camel.util.ObjectHelper.isNumericType(long.class));
+        Assertions.assertTrue(org.apache.camel.util.ObjectHelper.isNumericType(Long.class));
+        Assertions.assertTrue(org.apache.camel.util.ObjectHelper.isNumericType(Double.class));
+        Assertions.assertTrue(org.apache.camel.util.ObjectHelper.isNumericType(float.class));
+        Assertions.assertTrue(org.apache.camel.util.ObjectHelper.isNumericType(byte.class));
+
+        Assertions.assertFalse(org.apache.camel.util.ObjectHelper.isNumericType(String.class));
+        Assertions.assertFalse(org.apache.camel.util.ObjectHelper.isNumericType(Node.class));
     }
 }

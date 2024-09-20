@@ -33,7 +33,7 @@ public class SameSedaQueueSizeAndNoSizeTest extends ContextTestSupport {
     @Test
     public void testSameQueue() {
         for (int i = 0; i < 100; i++) {
-            template.sendBody("seda:foo", "" + i);
+            template.sendBody("seda:foo", Integer.toString(i));
         }
 
         CamelExecutionException e = assertThrows(CamelExecutionException.class,
@@ -65,10 +65,10 @@ public class SameSedaQueueSizeAndNoSizeTest extends ContextTestSupport {
     }
 
     @Override
-    protected RouteBuilder createRouteBuilder() throws Exception {
+    protected RouteBuilder createRouteBuilder() {
         return new RouteBuilder() {
             @Override
-            public void configure() throws Exception {
+            public void configure() {
                 from("seda:foo?size=100").routeId("foo").noAutoStartup().to("mock:foo");
 
                 from("seda:bar").routeId("bar").noAutoStartup().to("mock:bar");

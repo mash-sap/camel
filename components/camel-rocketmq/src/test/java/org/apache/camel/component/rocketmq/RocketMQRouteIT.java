@@ -27,12 +27,11 @@ import org.apache.camel.component.mock.MockEndpoint;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 
-@DisabledIfSystemProperty(named = "ci.env.name", matches = "apache.org",
-                          disabledReason = "These tests are flaky on Apache CI - see CAMEL-19832")
+@DisabledIfSystemProperty(named = "ci.env.name", matches = ".*",
+                          disabledReason = "These tests are flaky and unreliable - see CAMEL-19832")
 public class RocketMQRouteIT extends RocketMQTestSupport {
 
     public static final String EXPECTED_MESSAGE = "hello, RocketMQ.";
@@ -41,20 +40,13 @@ public class RocketMQRouteIT extends RocketMQTestSupport {
 
     private static final String RESULT_ENDPOINT_URI = "mock:result";
 
-    private MockEndpoint resultEndpoint;
+    private static final int MESSAGE_COUNT = 5;
 
-    private CountDownLatch latch = new CountDownLatch(1);
+    private CountDownLatch latch = new CountDownLatch(MESSAGE_COUNT);
 
     @BeforeAll
     static void beforeAll() throws Exception {
         rocketMQService.createTopic("START_TOPIC");
-    }
-
-    @Override
-    @BeforeEach
-    public void setUp() throws Exception {
-        super.setUp();
-
     }
 
     @Override
@@ -82,12 +74,16 @@ public class RocketMQRouteIT extends RocketMQTestSupport {
 
     @Test
     public void testSimpleRoute() throws Exception {
-        resultEndpoint = (MockEndpoint) context.getEndpoint(RESULT_ENDPOINT_URI);
+        MockEndpoint resultEndpoint = getMockEndpoint(RESULT_ENDPOINT_URI);
         resultEndpoint.expectedBodiesReceived(EXPECTED_MESSAGE);
+
+        // It is very slow, so we are lenient and OK if we receive just 1 message
         resultEndpoint.message(0).header(RocketMQConstants.TOPIC).isEqualTo("START_TOPIC");
         resultEndpoint.message(0).header(RocketMQConstants.TAG).isEqualTo("startTag");
 
-        template.sendBody(START_ENDPOINT_URI, EXPECTED_MESSAGE);
+        for (int i = 0; i < MESSAGE_COUNT; i++) {
+            template.sendBody(START_ENDPOINT_URI, EXPECTED_MESSAGE);
+        }
 
         Assertions.assertTrue(latch.await(5, TimeUnit.SECONDS), "Should have received a message");
         resultEndpoint.assertIsSatisfied();

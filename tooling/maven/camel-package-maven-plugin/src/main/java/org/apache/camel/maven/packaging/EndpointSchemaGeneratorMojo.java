@@ -20,15 +20,11 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.StringWriter;
-import java.io.Writer;
 import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
-import java.net.URI;
-import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -36,7 +32,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Date;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -46,6 +42,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import javax.inject.Inject;
 
 import org.apache.camel.Category;
 import org.apache.camel.maven.packaging.generics.ClassUtil;
@@ -80,6 +78,8 @@ import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
+import org.apache.maven.project.MavenProjectHelper;
+import org.codehaus.plexus.build.BuildContext;
 import org.jboss.forge.roaster.Roaster;
 import org.jboss.forge.roaster._shade.org.eclipse.jdt.core.dom.ASTNode;
 import org.jboss.forge.roaster._shade.org.eclipse.jdt.core.dom.Javadoc;
@@ -122,6 +122,16 @@ public class EndpointSchemaGeneratorMojo extends AbstractGeneratorMojo {
     protected List<Path> sourceRoots;
     protected Map<String, String> sources = new HashMap<>();
     protected Map<String, JavaSource<?>> parsed = new HashMap<>();
+
+    @Inject
+    public EndpointSchemaGeneratorMojo(MavenProjectHelper projectHelper, BuildContext buildContext) {
+        super(projectHelper, buildContext);
+    }
+
+    // for testing purposes
+    EndpointSchemaGeneratorMojo() {
+        this(null, null);
+    }
 
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
@@ -202,6 +212,7 @@ public class EndpointSchemaGeneratorMojo extends AbstractGeneratorMojo {
 
             ComponentModel model = writeJSonSchemeAndPropertyConfigurer(classElement, uriEndpoint, aliasTitle, alias,
                     extendsAlias, label, schemes, parentData);
+
             models.put(classElement, model);
         }
     }
@@ -218,7 +229,8 @@ public class EndpointSchemaGeneratorMojo extends AbstractGeneratorMojo {
                     String parentScheme = parentUriEndpoint.scheme().split(",")[0];
                     String superClassName = superclass.getName();
                     String packageName = superClassName.substring(0, superClassName.lastIndexOf('.'));
-                    String fileName = packageName.replace('.', '/') + "/" + parentScheme + ".json";
+                    String fileName
+                            = "META-INF/" + packageName.replace('.', '/') + "/" + parentScheme + PackageHelper.JSON_SUFIX;
                     String json = loadResource(fileName);
                     parentData = JsonMapper.generateComponentModel(json);
                 }
@@ -290,6 +302,9 @@ public class EndpointSchemaGeneratorMojo extends AbstractGeneratorMojo {
             enhanceComponentModelWithApiModel(componentModel);
         }
 
+        SchemaHelper.addModelMetadata(componentModel, project);
+        SchemaHelper.addModelMetadata(componentModel, classElement.getAnnotation(Metadata.class));
+
         String json = JsonMapper.createParameterJsonSchema(componentModel);
 
         // write json schema
@@ -297,7 +312,7 @@ public class EndpointSchemaGeneratorMojo extends AbstractGeneratorMojo {
         String packageName = name.substring(0, name.lastIndexOf('.'));
         String fileName = scheme + PackageHelper.JSON_SUFIX;
 
-        String file = packageName.replace('.', '/') + "/" + fileName;
+        String file = "META-INF/" + packageName.replace('.', '/') + "/" + fileName;
         updateResource(resourcesOutputDir.toPath(), file, json);
 
         generateEndpointConfigurer(classElement, uriEndpoint, scheme, schemes, componentModel, parentData);
@@ -664,8 +679,9 @@ public class EndpointSchemaGeneratorMojo extends AbstractGeneratorMojo {
     }
 
     public String getDocumentationWithNotes(BaseOptionModel option) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(option.getDescription());
+        String description = option.getDescription();
+        StringBuilder sb = new StringBuilder(description.length() * 64);
+        sb.append(description);
 
         if (!Strings.isNullOrEmpty(option.getDefaultValueNote())) {
             if (sb.charAt(sb.length() - 1) != '.') {
@@ -816,6 +832,7 @@ public class EndpointSchemaGeneratorMojo extends AbstractGeneratorMojo {
         model.setRemote(uriEndpoint.remote());
         model.setAsync(loadClass("org.apache.camel.AsyncEndpoint").isAssignableFrom(endpointClassElement));
         model.setApi(loadClass("org.apache.camel.ApiEndpoint").isAssignableFrom(endpointClassElement));
+        model.setBrowsable(loadClass("org.apache.camel.spi.BrowsableEndpoint").isAssignableFrom(endpointClassElement));
         model.setApiSyntax(uriEndpoint.apiSyntax());
 
         // what is the first version this component was added to Apache Camel
@@ -1072,7 +1089,7 @@ public class EndpointSchemaGeneratorMojo extends AbstractGeneratorMojo {
                     option.setKind("property");
                     option.setName(name);
                     option.setDisplayName(displayName);
-                    option.setType(getType(fieldTypeName, false, isDuration));
+                    option.setType(MojoHelper.getType(fieldTypeName, false, isDuration));
                     option.setJavaType(fieldTypeName);
                     option.setRequired(required);
                     option.setDefaultValue(defaultValue);
@@ -1359,7 +1376,7 @@ public class EndpointSchemaGeneratorMojo extends AbstractGeneratorMojo {
         }
         option.setName(name);
         option.setDisplayName(displayName);
-        option.setType(getType(fieldTypeName, false, isDuration));
+        option.setType(MojoHelper.getType(fieldTypeName, false, isDuration));
         option.setJavaType(fieldTypeName);
         option.setRequired(required);
         option.setDefaultValue(defaultValue);
@@ -1548,7 +1565,7 @@ public class EndpointSchemaGeneratorMojo extends AbstractGeneratorMojo {
             option.setName(name);
             option.setKind("path");
             option.setDisplayName(displayName);
-            option.setType(getType(fieldTypeName, false, isDuration));
+            option.setType(MojoHelper.getType(fieldTypeName, false, isDuration));
             option.setJavaType(fieldTypeName);
             option.setRequired(required);
             option.setDefaultValue(defaultValue);
@@ -1652,9 +1669,24 @@ public class EndpointSchemaGeneratorMojo extends AbstractGeneratorMojo {
 
         try {
             boolean extended = model.isApi(); // if the component is api then the generated configurer should be an extended configurer
-            String source = PropertyConfigurerGenerator.generatePropertyConfigurer(pn, cn, en, pfqn, psn, hasSuper, component,
-                    extended, false,
-                    options, model);
+
+            options = options.stream().sorted(Comparator.comparing(BaseOptionModel::getName)).collect(Collectors.toList());
+
+            Map<String, Object> ctx = new HashMap<>();
+            ctx.put("generatorClass", getClass().getName());
+            ctx.put("package", pn);
+            ctx.put("className", cn);
+            ctx.put("type", en);
+            ctx.put("pfqn", pfqn);
+            ctx.put("psn", psn);
+            ctx.put("hasSuper", hasSuper);
+            ctx.put("component", component);
+            ctx.put("extended", extended);
+            ctx.put("bootstrap", false);
+            ctx.put("options", options);
+            ctx.put("model", model);
+            ctx.put("mojo", this);
+            String source = velocity("velocity/property-configurer.vm", ctx);
 
             updateResource(sourcesOutputDir.toPath(), fqn.replace('.', '/') + ".java", source);
         } catch (Exception e) {
@@ -1664,13 +1696,11 @@ public class EndpointSchemaGeneratorMojo extends AbstractGeneratorMojo {
     }
 
     protected void generateMetaInfConfigurer(String name, String fqn) {
-        try (Writer w = new StringWriter()) {
-            w.append("# " + GENERATED_MSG + "\n");
-            w.append("class=").append(fqn).append("\n");
-            updateResource(resourcesOutputDir.toPath(), "META-INF/services/org/apache/camel/configurer/" + name, w.toString());
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        StringBuilder w = new StringBuilder(256);
+
+        w.append("# ").append(GENERATED_MSG).append("\n");
+        w.append("class=").append(fqn).append("\n");
+        updateResource(resourcesOutputDir.toPath(), "META-INF/services/org/apache/camel/configurer/" + name, w.toString());
     }
 
     private IndexView getIndex() {
@@ -1868,79 +1898,6 @@ public class EndpointSchemaGeneratorMojo extends AbstractGeneratorMojo {
         String fieldTypeName = new GenericType(fieldType).toString();
         fieldTypeName = fieldTypeName.replace('$', '.');
         return fieldTypeName;
-    }
-
-    /**
-     * Gets the JSON schema type.
-     *
-     * @param  type the java type
-     * @return      the json schema type, is never null, but returns <tt>object</tt> as the generic type
-     */
-    public static String getType(String type, boolean enumType, boolean isDuration) {
-        if (enumType) {
-            return "enum";
-        } else if (isDuration) {
-            return "duration";
-        } else if (type == null) {
-            // return generic type for unknown type
-            return "object";
-        } else if (type.equals(URI.class.getName()) || type.equals(URL.class.getName())) {
-            return "string";
-        } else if (type.equals(File.class.getName())) {
-            return "string";
-        } else if (type.equals(Date.class.getName())) {
-            return "string";
-        } else if (type.startsWith("java.lang.Class")) {
-            return "string";
-        } else if (type.startsWith("java.util.List") || type.startsWith("java.util.Collection")) {
-            return "array";
-        }
-
-        String primitive = getPrimitiveType(type);
-        if (primitive != null) {
-            return primitive;
-        }
-
-        return "object";
-    }
-
-    /**
-     * Gets the JSON schema primitive type.
-     *
-     * @param  name the java type
-     * @return      the json schema primitive type, or <tt>null</tt> if not a primitive
-     */
-    public static String getPrimitiveType(String name) {
-        // special for byte[] or Object[] as its common to use
-        if ("java.lang.byte[]".equals(name) || "byte[]".equals(name)) {
-            return "string";
-        } else if ("java.lang.Byte[]".equals(name) || "Byte[]".equals(name)) {
-            return "array";
-        } else if ("java.lang.Object[]".equals(name) || "Object[]".equals(name)) {
-            return "array";
-        } else if ("java.lang.String[]".equals(name) || "String[]".equals(name)) {
-            return "array";
-        } else if ("java.lang.Character".equals(name) || "Character".equals(name) || "char".equals(name)) {
-            return "string";
-        } else if ("java.lang.String".equals(name) || "String".equals(name)) {
-            return "string";
-        } else if ("java.lang.Boolean".equals(name) || "Boolean".equals(name) || "boolean".equals(name)) {
-            return "boolean";
-        } else if ("java.lang.Integer".equals(name) || "Integer".equals(name) || "int".equals(name)) {
-            return "integer";
-        } else if ("java.lang.Long".equals(name) || "Long".equals(name) || "long".equals(name)) {
-            return "integer";
-        } else if ("java.lang.Short".equals(name) || "Short".equals(name) || "short".equals(name)) {
-            return "integer";
-        } else if ("java.lang.Byte".equals(name) || "Byte".equals(name) || "byte".equals(name)) {
-            return "integer";
-        } else if ("java.lang.Float".equals(name) || "Float".equals(name) || "float".equals(name)) {
-            return "number";
-        } else if ("java.lang.Double".equals(name) || "Double".equals(name) || "double".equals(name)) {
-            return "number";
-        }
-
-        return null;
     }
 
     /**

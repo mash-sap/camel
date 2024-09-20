@@ -33,6 +33,8 @@ import org.apache.camel.component.seda.SedaComponent;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.processor.Pipeline;
 import org.apache.camel.processor.errorhandler.ErrorHandlerSupport;
+import org.apache.camel.spi.Debugger;
+import org.apache.camel.spi.FactoryFinder;
 import org.apache.camel.support.DefaultExchange;
 import org.apache.camel.support.PredicateAssertHelper;
 import org.hamcrest.Matcher;
@@ -63,7 +65,7 @@ public abstract class TestSupport {
 
     protected TestInfo info;
 
-    protected Logger log = LoggerFactory.getLogger(getClass());
+    protected final Logger log = LoggerFactory.getLogger(getClass());
 
     @TempDir
     private Path tempDirectory;
@@ -87,7 +89,7 @@ public abstract class TestSupport {
         Assumptions.assumeTrue(canRunOnThisPlatform());
     }
 
-    @Deprecated
+    @Deprecated(since = "4.3.0")
     public void deleteTestDirectory() {
     }
 
@@ -113,12 +115,12 @@ public abstract class TestSupport {
         return testDirectory(path, false);
     }
 
-    @Deprecated
+    @Deprecated(since = "4.3.0")
     protected Path testDirectory(boolean create) {
         return testDirectory();
     }
 
-    @Deprecated
+    @Deprecated(since = "4.3.0")
     public static Path testDirectory(Class<?> testClass, boolean create) {
         Path dir = Paths.get("target", "data", testClass.getSimpleName());
         if (create) {
@@ -141,6 +143,19 @@ public abstract class TestSupport {
             }
         }
         return resolvedPath;
+    }
+
+    /**
+     * Indicates whether the component {@code camel-debug} is present in the classpath of the test.
+     *
+     * @return {@code true} if it is present, {@code false} otherwise.
+     */
+    public static boolean isCamelDebugPresent() {
+        // Needs to be detected before initializing and starting the camel context
+        return Thread.currentThread()
+                .getContextClassLoader()
+                .getResource(String.format("%s%s", FactoryFinder.DEFAULT_PATH, Debugger.FACTORY))
+               != null;
     }
 
     protected String fileUri() {
@@ -418,8 +433,8 @@ public abstract class TestSupport {
      */
     public static Processor unwrap(Processor processor) {
         while (true) {
-            if (processor instanceof DelegateProcessor) {
-                processor = ((DelegateProcessor) processor).getProcessor();
+            if (processor instanceof DelegateProcessor delegateProcessor) {
+                processor = delegateProcessor.getProcessor();
             } else {
                 return processor;
             }
@@ -434,15 +449,15 @@ public abstract class TestSupport {
      */
     public static Channel unwrapChannel(Processor processor) {
         while (true) {
-            if (processor instanceof Pipeline) {
-                processor = ((Pipeline) processor).next().get(0);
+            if (processor instanceof Pipeline pipeline) {
+                processor = pipeline.next().get(0);
             }
-            if (processor instanceof Channel) {
-                return (Channel) processor;
-            } else if (processor instanceof DelegateProcessor) {
-                processor = ((DelegateProcessor) processor).getProcessor();
-            } else if (processor instanceof ErrorHandlerSupport) {
-                processor = ((ErrorHandlerSupport) processor).getOutput();
+            if (processor instanceof Channel channel) {
+                return channel;
+            } else if (processor instanceof DelegateProcessor delegateProcessor) {
+                processor = delegateProcessor.getProcessor();
+            } else if (processor instanceof ErrorHandlerSupport errorHandlerSupport) {
+                processor = errorHandlerSupport.getOutput();
             } else {
                 return null;
             }
@@ -456,7 +471,7 @@ public abstract class TestSupport {
      * @deprecated      since updating the class to use junit5 @TempDir, it no longer should control temp directory
      *                  lifecycle
      */
-    @Deprecated
+    @Deprecated(since = "4.3.0")
     public static void deleteDirectory(String file) {
         deleteDirectory(new File(file));
     }
@@ -468,7 +483,7 @@ public abstract class TestSupport {
      * @deprecated      since updating the class to use junit5 @TempDir, it no longer should control temp directory
      *                  lifecycle
      */
-    @Deprecated
+    @Deprecated(since = "4.3.0")
     public static void deleteDirectory(File file) {
         if (file.isDirectory()) {
             File[] files = file.listFiles();

@@ -40,6 +40,7 @@ import org.apache.camel.spi.BrowsableEndpoint;
 import org.apache.camel.spi.ExceptionHandler;
 import org.apache.camel.spi.IdempotentRepository;
 import org.apache.camel.spi.Language;
+import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.UriParam;
 import org.apache.camel.support.ScheduledPollEndpoint;
 import org.apache.camel.support.processor.idempotent.MemoryIdempotentRepository;
@@ -96,6 +97,10 @@ public abstract class GenericFileEndpoint<T> extends ScheduledPollEndpoint imple
                             + "can use dynamic placeholders.The done file is always expected in the same folder as the original "
                             + "file.<p/> Only ${file.name} and ${file.name.next} is supported as dynamic placeholders.")
     protected String doneFileName;
+
+    @UriParam(label = "advanced", defaultValue = "100",
+              description = "Maximum number of messages to keep in memory available for browsing. Use 0 for unlimited.")
+    private int browseLimit = 100;
 
     // producer options
 
@@ -276,6 +281,13 @@ public abstract class GenericFileEndpoint<T> extends ScheduledPollEndpoint imple
                                                                                + "LRUCache that holds 1000 entries. If noop=true then idempotent will be enabled as well to avoid "
                                                                                + "consuming the same files over and over again.")
     protected Boolean idempotent;
+    @UriParam(label = "consumer,filter", defaultValue = "false", description = "Option to use the Idempotent "
+                                                                               + "Consumer EIP pattern to let Camel skip already processed files. Will by default use a memory based "
+                                                                               + "LRUCache that holds 1000 entries. If noop=true then idempotent will be enabled as well to avoid "
+                                                                               + "consuming the same files over and over again.")
+    @Metadata(label = "consumer,filter", javaType = "java.lang.Boolean", defaultValue = "true",
+              description = "Sets whether to eagerly add the filename to the idempotent repository or wait until the exchange is complete.")
+    private Boolean idempotentEager = Boolean.TRUE;
     @UriParam(label = "consumer,filter", javaType = "java.lang.String", description = "To use a custom idempotent "
                                                                                       + "key. By default the absolute path of the file is used. You can use the File Language, for example to "
                                                                                       + "use the file name and file size, you can do: idempotentKey=${file:name}-${file:size}")
@@ -479,22 +491,76 @@ public abstract class GenericFileEndpoint<T> extends ScheduledPollEndpoint imple
 
     /**
      * This implementation will <b>not</b> load the file content. Any file locking is neither in use by this
-     * implementation..
+     * implementation.
      */
     @Override
     public List<Exchange> getExchanges() {
+        return getExchanges(browseLimit, null);
+    }
+
+    @Override
+    public List<Exchange> getExchanges(int limit, java.util.function.Predicate filter) {
+        return getExchanges(limit, filter, false);
+    }
+
+    @Override
+    public BrowseStatus getBrowseStatus(int limit) {
+        List<Exchange> list = getExchanges(limit, null, true);
+        long ts = 0;
+        long ts2 = 0;
+        if (!list.isEmpty()) {
+            ts = list.get(0).getMessage().getHeader(Exchange.MESSAGE_TIMESTAMP, 0, long.class);
+            ts2 = list.get(list.size() - 1).getMessage().getHeader(Exchange.MESSAGE_TIMESTAMP, 0, long.class);
+        }
+        return new BrowseStatus(list.size(), ts, ts2);
+    }
+
+    private List<Exchange> getExchanges(int limit, java.util.function.Predicate filter, boolean status) {
         final List<Exchange> answer = new ArrayList<>();
 
         GenericFileConsumer<?> consumer = null;
         try {
-            // create a new consumer which can poll the exchanges we want to
-            // browse
+            // create a new consumer which can poll the exchanges we want to browse
             // do not provide a processor as we do some custom processing
             consumer = createConsumer(null);
+            if (filter == null) {
+                consumer.setMaxMessagesPerPoll(browseLimit);
+            }
+            if (status) {
+                // optimize to not download files as we only want status
+                consumer.setRetrieveFile(false);
+            }
+            final GenericFileConsumer gfc = consumer;
             consumer.setCustomProcessor(new Processor() {
                 @Override
                 public void process(Exchange exchange) throws Exception {
-                    answer.add(exchange);
+                    boolean include = true;
+                    if (filter != null) {
+                        include = filter.test(exchange);
+                    }
+                    if (include && answer.size() < browseLimit) {
+                        if (!status) {
+                            // ensure payload is downloaded (when not in status mode)
+                            GenericFile<?> gf = exchange.getMessage().getBody(GenericFile.class);
+                            if (gf != null) {
+                                final String name = gf.getAbsoluteFilePath();
+                                try {
+                                    boolean downloaded = gfc.tryRetrievingFile(exchange, name, gf, name, gf);
+                                    if (downloaded) {
+                                        gf.getBinding().loadContent(exchange, gf);
+                                        Object data = gf.getBody();
+                                        if (data != null) {
+                                            exchange.getMessage().setBody(data);
+                                        }
+                                    }
+                                } catch (Exception e) {
+                                    LOG.debug("Error trying to retrieve file: {} due to: {}. This exception is ignored.", name,
+                                            e.getMessage(), e);
+                                }
+                            }
+                        }
+                        answer.add(exchange);
+                    }
                 }
             });
             // do not start scheduler, as we invoke the poll manually
@@ -513,7 +579,6 @@ public abstract class GenericFileEndpoint<T> extends ScheduledPollEndpoint imple
                 LOG.debug("Error stopping consumer used for browsing exchanges. This exception will be ignored", e);
             }
         }
-
         return answer;
     }
 
@@ -861,8 +926,22 @@ public abstract class GenericFileEndpoint<T> extends ScheduledPollEndpoint imple
         this.doneFileName = doneFileName;
     }
 
+    @Override
+    public int getBrowseLimit() {
+        return browseLimit;
+    }
+
+    @Override
+    public void setBrowseLimit(int browseLimit) {
+        this.browseLimit = browseLimit;
+    }
+
     public Boolean isIdempotent() {
         return idempotent != null ? idempotent : false;
+    }
+
+    public boolean isIdempotentEager() {
+        return idempotentEager != null ? idempotentEager : false;
     }
 
     public String getCharset() {
@@ -896,6 +975,17 @@ public abstract class GenericFileEndpoint<T> extends ScheduledPollEndpoint imple
      */
     public void setIdempotent(Boolean idempotent) {
         this.idempotent = idempotent;
+    }
+
+    public Boolean getIdempotentEager() {
+        return idempotentEager;
+    }
+
+    /**
+     * Sets whether to eagerly add the key to the idempotent repository or wait until the exchange is complete.
+     */
+    public void setIdempotentEager(Boolean idempotentEager) {
+        this.idempotentEager = idempotentEager;
     }
 
     public Expression getIdempotentKey() {
@@ -1593,7 +1683,7 @@ public abstract class GenericFileEndpoint<T> extends ScheduledPollEndpoint imple
         // remove trailing slash
         expression = FileUtil.stripTrailingSeparator(expression);
 
-        StringBuilder sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder(64);
 
         // if relative then insert start with the parent folder
         if (!isAbsolute(expression)) {

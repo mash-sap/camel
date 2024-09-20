@@ -69,7 +69,7 @@ import org.apache.camel.spi.Metadata;
 /**
  * Converts the message data received from the wire into a format that Apache Camel processors can consume
  */
-@Metadata(label = "dataformat,transformation")
+@Metadata(label = "eip,dataformat,transformation")
 @XmlRootElement(name = "unmarshal")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class UnmarshalDefinition extends NoOutputDefinition<UnmarshalDefinition> implements DataFormatDefinitionAware {
@@ -128,8 +128,21 @@ public class UnmarshalDefinition extends NoOutputDefinition<UnmarshalDefinition>
     public UnmarshalDefinition() {
     }
 
+    protected UnmarshalDefinition(UnmarshalDefinition source) {
+        super(source);
+        this.variableSend = source.variableSend;
+        this.variableReceive = source.variableReceive;
+        this.allowNullBody = source.allowNullBody;
+        this.dataFormatType = source.dataFormatType != null ? source.dataFormatType.copyDefinition() : null;
+    }
+
     public UnmarshalDefinition(DataFormatDefinition dataFormatType) {
         this.dataFormatType = dataFormatType;
+    }
+
+    @Override
+    public UnmarshalDefinition copyDefinition() {
+        return new UnmarshalDefinition(this);
     }
 
     @Override

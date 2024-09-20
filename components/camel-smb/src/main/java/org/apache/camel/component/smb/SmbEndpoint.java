@@ -16,10 +16,13 @@
  */
 package org.apache.camel.component.smb;
 
+import java.util.Map;
+
 import org.apache.camel.Category;
 import org.apache.camel.Consumer;
 import org.apache.camel.Processor;
 import org.apache.camel.Producer;
+import org.apache.camel.spi.EndpointServiceLocation;
 import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.UriEndpoint;
 import org.apache.camel.spi.UriParam;
@@ -30,16 +33,16 @@ import org.apache.camel.support.ScheduledPollEndpoint;
  * Receive files from SMB (Server Message Block) shares.
  */
 @UriEndpoint(firstVersion = "4.3.0", scheme = "smb", title = "SMB", syntax = "smb:hostname:port/shareName",
-             consumerOnly = true,
              category = { Category.FILE })
-public class SmbEndpoint extends ScheduledPollEndpoint {
+public class SmbEndpoint extends ScheduledPollEndpoint implements EndpointServiceLocation {
 
     @UriPath
     @Metadata(required = true)
     private String hostname;
     @UriPath(defaultValue = "445")
     private int port;
-    @UriPath(secret = true)
+    @UriPath
+    @Metadata(required = true)
     private String shareName;
 
     @UriParam
@@ -53,8 +56,30 @@ public class SmbEndpoint extends ScheduledPollEndpoint {
     }
 
     @Override
+    public String getServiceUrl() {
+        if (port != 0) {
+            return hostname + ":" + port;
+        } else {
+            return hostname;
+        }
+    }
+
+    @Override
+    public String getServiceProtocol() {
+        return "smb";
+    }
+
+    @Override
+    public Map<String, String> getServiceMetadata() {
+        if (configuration.getUsername() != null) {
+            return Map.of("username", configuration.getUsername());
+        }
+        return null;
+    }
+
+    @Override
     public Producer createProducer() {
-        throw new UnsupportedOperationException("SMB producer is not supported.");
+        return new SmbProducer(this);
     }
 
     @Override

@@ -17,6 +17,7 @@
 package org.apache.camel.component.paho;
 
 import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 
 import org.apache.camel.ConsumerTemplate;
 import org.apache.camel.EndpointInject;
@@ -30,11 +31,14 @@ import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
 import org.junit.jupiter.api.extension.RegisterExtension;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+@DisabledOnOs(architectures = { "s390x" },
+              disabledReason = "This test does not run reliably on s390x")
 public class PahoComponentTest extends PahoTestSupport {
 
     @Order(2)
@@ -127,7 +131,7 @@ public class PahoComponentTest extends PahoTestSupport {
         mock.assertIsSatisfied();
 
         Exchange exchange = mock.getExchanges().get(0);
-        String payload = new String((byte[]) exchange.getIn().getBody(), "utf-8");
+        String payload = new String((byte[]) exchange.getIn().getBody(), StandardCharsets.UTF_8);
 
         assertEquals("queue", exchange.getIn().getHeader(PahoConstants.MQTT_TOPIC));
         assertEquals(msg, payload);

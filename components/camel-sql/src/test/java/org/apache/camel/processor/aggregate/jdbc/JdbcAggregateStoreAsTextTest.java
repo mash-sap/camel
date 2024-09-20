@@ -18,12 +18,14 @@ package org.apache.camel.processor.aggregate.jdbc;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import javax.sql.DataSource;
 
 import org.apache.camel.component.mock.MockEndpoint;
 import org.apache.camel.test.spring.junit5.CamelSpringTestSupport;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.support.AbstractXmlApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -46,10 +48,8 @@ public class JdbcAggregateStoreAsTextTest extends CamelSpringTestSupport {
                 "JdbcSpringDataSource.xml", "JdbcSpringAggregateStoreAsText.xml");
     }
 
-    @Override
-    public void postProcessTest() throws Exception {
-        super.postProcessTest();
-
+    @BeforeEach
+    public void configureJdbcAggregationRepository() throws Exception {
         repo = applicationContext.getBean("repo3", JdbcAggregationRepository.class);
         dataSource = context.getRegistry().lookupByNameAndType(getClass().getSimpleName() + "-dataSource3", DataSource.class);
         jdbcTemplate = new JdbcTemplate(dataSource);
@@ -103,7 +103,7 @@ public class JdbcAggregateStoreAsTextTest extends CamelSpringTestSupport {
         mock.expectedBodiesReceived("ABCDE");
 
         repo.setStoreBodyAsText(true);
-        repo.setHeadersToStoreAsText(null);
+        repo.setHeadersToStoreAsText((List) null);
 
         Map<String, Object> headers = new HashMap<>();
         headers.put("id", 123);

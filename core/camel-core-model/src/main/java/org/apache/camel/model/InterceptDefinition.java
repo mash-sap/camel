@@ -39,9 +39,19 @@ import org.apache.camel.spi.Metadata;
 public class InterceptDefinition extends OutputDefinition<InterceptDefinition> {
 
     @XmlTransient
-    protected final List<Processor> intercepted = new ArrayList<>();
+    protected List<Processor> intercepted = new ArrayList<>();
 
     public InterceptDefinition() {
+    }
+
+    protected InterceptDefinition(InterceptDefinition source) {
+        super(source);
+        this.intercepted = new ArrayList<>(source.intercepted);
+    }
+
+    @Override
+    public InterceptDefinition copyDefinition() {
+        return new InterceptDefinition(this);
     }
 
     @Override
@@ -103,8 +113,7 @@ public class InterceptDefinition extends OutputDefinition<InterceptDefinition> {
         }
 
         ProcessorDefinition<?> first = getOutputs().get(0);
-        if (first instanceof WhenDefinition) {
-            WhenDefinition when = (WhenDefinition) first;
+        if (first instanceof WhenDefinition when) {
             // move this outputs to the when, expect the first one
             // as the first one is the interceptor itself
             for (int i = 1; i < outputs.size(); i++) {

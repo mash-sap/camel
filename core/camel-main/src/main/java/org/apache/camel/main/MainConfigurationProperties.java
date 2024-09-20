@@ -26,6 +26,7 @@ import org.apache.camel.builder.LambdaRouteBuilder;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.spi.BootstrapCloseable;
 import org.apache.camel.spi.Configurer;
+import org.apache.camel.spi.Metadata;
 
 /**
  * Global configuration for Camel Main to configure context name, stream caching and other global configurations.
@@ -34,6 +35,8 @@ import org.apache.camel.spi.Configurer;
 public class MainConfigurationProperties extends DefaultConfigurationProperties<MainConfigurationProperties>
         implements BootstrapCloseable {
 
+    @Metadata(enums = "dev,test,prod")
+    private String profile;
     private boolean autoConfigurationEnabled = true;
     private boolean autoConfigurationEnvironmentVariablesEnabled = true;
     private boolean autoConfigurationSystemPropertiesEnabled = true;
@@ -44,11 +47,13 @@ public class MainConfigurationProperties extends DefaultConfigurationProperties<
     private String basePackageScan;
     private boolean basePackageScanEnabled = true;
 
+    private String mainListenerClasses;
     private String routesBuilderClasses;
     private String configurationClasses;
 
     private List<RoutesBuilder> routesBuilders = new ArrayList<>();
     private List<CamelConfiguration> configurations = new ArrayList<>();
+    private List<MainListener> mainListeners = new ArrayList<>();
 
     // extended configuration
     private HealthConfigurationProperties healthConfigurationProperties;
@@ -63,6 +68,7 @@ public class MainConfigurationProperties extends DefaultConfigurationProperties<
     private HttpServerConfigurationProperties httpServerConfigurationProperties;
     private SSLConfigurationProperties sslConfigurationProperties;
     private DebuggerConfigurationProperties debuggerConfigurationProperties;
+    private TracerConfigurationProperties tracerConfigurationProperties;
     private RouteControllerConfigurationProperties routeControllerConfigurationProperties;
 
     @Override
@@ -115,6 +121,10 @@ public class MainConfigurationProperties extends DefaultConfigurationProperties<
             debuggerConfigurationProperties.close();
             debuggerConfigurationProperties = null;
         }
+        if (tracerConfigurationProperties != null) {
+            tracerConfigurationProperties.close();
+            tracerConfigurationProperties = null;
+        }
         if (routeControllerConfigurationProperties != null) {
             routeControllerConfigurationProperties.close();
             routeControllerConfigurationProperties = null;
@@ -126,6 +136,10 @@ public class MainConfigurationProperties extends DefaultConfigurationProperties<
         if (configurations != null) {
             configurations.clear();
             configurations = null;
+        }
+        if (mainListeners != null) {
+            mainListeners.clear();
+            mainListeners = null;
         }
     }
 
@@ -254,6 +268,24 @@ public class MainConfigurationProperties extends DefaultConfigurationProperties<
     }
 
     /**
+     * To configure Tracer.
+     */
+    public TracerConfigurationProperties tracerConfig() {
+        if (tracerConfigurationProperties == null) {
+            tracerConfigurationProperties = new TracerConfigurationProperties(this);
+        }
+
+        return tracerConfigurationProperties;
+    }
+
+    /**
+     * Whether there has been any Tracer configuration specified.
+     */
+    public boolean hasTracerConfiguration() {
+        return tracerConfigurationProperties != null;
+    }
+
+    /**
      * To configure Route Controller.
      */
     public RouteControllerConfigurationProperties routeControllerConfig() {
@@ -358,6 +390,23 @@ public class MainConfigurationProperties extends DefaultConfigurationProperties<
 
     // getter and setters
     // --------------------------------------------------------------
+
+    public String getProfile() {
+        return profile;
+    }
+
+    /**
+     * Camel profile to use when running.
+     *
+     * The dev profile is for development, which enables a set of additional developer focus functionality, tracing,
+     * debugging, and gathering additional runtime statistics that are useful during development. However, those
+     * additional features has a slight overhead cost, and are not enabled for production profile.
+     *
+     * The default profile is prod.
+     */
+    public void setProfile(String profile) {
+        this.profile = profile;
+    }
 
     public boolean isAutoConfigurationEnabled() {
         return autoConfigurationEnabled;
@@ -493,6 +542,64 @@ public class MainConfigurationProperties extends DefaultConfigurationProperties<
         this.extraShutdownTimeout = extraShutdownTimeout;
     }
 
+    // getter and setters - main listener
+    // --------------------------------------------------------------
+
+    public String getMainListenerClasses() {
+        return mainListenerClasses;
+    }
+
+    /**
+     * Sets classes names that will be used for {@link MainListener} that makes it possible to do custom logic during
+     * starting and stopping camel-main.
+     */
+    public void setMainListenerClasses(String mainListenerClasses) {
+        this.mainListenerClasses = mainListenerClasses;
+    }
+
+    /**
+     * Adds {@link MainListener} object to the known list of main listener classes.
+     */
+    @SuppressWarnings("unchecked")
+    private void addMainListenerClass(Class<? extends MainListener>... listener) {
+        StringJoiner existing = new StringJoiner(",");
+        if (mainListenerClasses != null && !mainListenerClasses.isEmpty()) {
+            existing.add(mainListenerClasses);
+        }
+        if (listener != null) {
+            for (Class<? extends MainListener> clazz : listener) {
+                existing.add(clazz.getName());
+            }
+        }
+        setMainListenerClasses(existing.toString());
+    }
+
+    /**
+     * Adds main listener object to the known list of listener objects.
+     */
+    public void addMainListener(MainListener listener) {
+        mainListeners.add(listener);
+    }
+
+    /**
+     * Adds main listener class to the known list of listener objects.
+     */
+    public void addMainListener(Class<? extends MainListener> listener) {
+        addMainListenerClass(listener);
+    }
+
+    public List<MainListener> getMainListeners() {
+        return mainListeners;
+    }
+
+    /**
+     * Sets main listener objects that will be used for {@link MainListener} that makes it possible to do custom logic
+     * during starting and stopping camel-main.
+     */
+    public void setMainListeners(List<MainListener> mainListeners) {
+        this.mainListeners = mainListeners;
+    }
+
     // getter and setters - configurations
     // --------------------------------------------------------------
 
@@ -614,6 +721,20 @@ public class MainConfigurationProperties extends DefaultConfigurationProperties<
     // --------------------------------------------------------------
 
     /**
+     * Camel profile to use when running.
+     *
+     * The dev profile is for development, which enables a set of additional developer focus functionality, tracing,
+     * debugging, and gathering additional runtime statistics that are useful during development. However, those
+     * additional features has a slight overhead cost, and are not enabled for production profile.
+     *
+     * The default profile is prod.
+     */
+    public MainConfigurationProperties withProfile(String profile) {
+        this.profile = profile;
+        return this;
+    }
+
+    /**
      * Whether auto configuration of components/dataformats/languages is enabled or not. When enabled the configuration
      * parameters are loaded from the properties component and configured as defaults (similar to spring-boot
      * auto-configuration). You can prefix the parameters in the properties file with: -
@@ -719,6 +840,43 @@ public class MainConfigurationProperties extends DefaultConfigurationProperties<
      */
     public MainConfigurationProperties withBasePackageScanEnabled(boolean basePackageScanEnabled) {
         this.basePackageScanEnabled = basePackageScanEnabled;
+        return this;
+    }
+
+    // fluent builders - main listener
+    // --------------------------------------------------------------
+
+    /**
+     * Sets classes names that will be used for {@link MainListener} that makes it possible to do custom logic during
+     * starting and stopping camel-main.
+     */
+    public MainConfigurationProperties withMainListeners(String listeners) {
+        if (this.mainListenerClasses == null) {
+            this.mainListenerClasses = "";
+        }
+        if (this.mainListenerClasses.isEmpty()) {
+            this.mainListenerClasses = listeners;
+        } else {
+            this.mainListenerClasses = "," + listeners;
+        }
+        return this;
+    }
+
+    /**
+     * Adds main listener object to the known list of listener objects.
+     */
+    @SuppressWarnings("unchecked")
+    public MainConfigurationProperties withMainListeners(
+            Class<? extends MainListener>... listeners) {
+        addMainListenerClass(listeners);
+        return this;
+    }
+
+    /**
+     * Adds main listener object to the known list of listener objects.
+     */
+    public MainConfigurationProperties withMainListeners(List<MainListener> listeners) {
+        setMainListeners(listeners);
         return this;
     }
 

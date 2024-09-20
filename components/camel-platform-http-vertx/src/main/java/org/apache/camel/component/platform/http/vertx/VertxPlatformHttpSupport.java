@@ -17,8 +17,6 @@
 package org.apache.camel.component.platform.http.vertx;
 
 import java.io.InputStream;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
@@ -42,6 +40,7 @@ import org.apache.camel.Message;
 import org.apache.camel.NoTypeConversionAvailableException;
 import org.apache.camel.TypeConverter;
 import org.apache.camel.spi.HeaderFilterStrategy;
+import org.apache.camel.support.ExceptionHelper;
 import org.apache.camel.support.ExchangeHelper;
 import org.apache.camel.support.MessageHelper;
 import org.apache.camel.support.ObjectHelper;
@@ -66,16 +65,17 @@ public final class VertxPlatformHttpSupport {
     }
 
     static Object toHttpResponse(
-            HttpServerResponse response, Message message, HeaderFilterStrategy headerFilterStrategy,
+            RoutingContext ctx, Message message, HeaderFilterStrategy headerFilterStrategy,
             boolean muteExceptions) {
         final Exchange exchange = message.getExchange();
 
+        HttpServerResponse response = ctx.response();
         final int code = determineResponseCode(exchange, message.getBody());
         response.setStatusCode(code);
 
         // copy headers from Message to Response
         if (headerFilterStrategy != null) {
-            copyMessageHeadersToResponse(response, message, headerFilterStrategy, exchange);
+            copyMessageHeadersToResponse(response, ctx.pathParams(), message, headerFilterStrategy, exchange);
         }
 
         final Object body = getBody(message, muteExceptions, exchange);
@@ -114,12 +114,10 @@ public final class VertxPlatformHttpSupport {
             message.setHeader(Exchange.CONTENT_TYPE, DEFAULT_CONTENT_TYPE_ON_EXCEPTION);
         } else {
             // we failed due an exception so print it as plain text
-            final StringWriter sw = new StringWriter();
-            final PrintWriter pw = new PrintWriter(sw);
-            exception.printStackTrace(pw);
+            final String stackTrace = ExceptionHelper.stackTraceToString(exception);
 
             // the body should then be the stacktrace
-            body = ByteBuffer.wrap(sw.toString().getBytes(StandardCharsets.UTF_8));
+            body = ByteBuffer.wrap(stackTrace.getBytes(StandardCharsets.UTF_8));
             // force content type to be text/plain as that is what the stacktrace is
             message.setHeader(Exchange.CONTENT_TYPE, DEFAULT_CONTENT_TYPE_ON_EXCEPTION);
         }
@@ -130,11 +128,18 @@ public final class VertxPlatformHttpSupport {
     }
 
     private static void copyMessageHeadersToResponse(
-            HttpServerResponse response, Message message, HeaderFilterStrategy headerFilterStrategy, Exchange exchange) {
+            HttpServerResponse response, Map<String, String> pathParams,
+            Message message, HeaderFilterStrategy headerFilterStrategy, Exchange exchange) {
         final TypeConverter tc = exchange.getContext().getTypeConverter();
 
         for (Map.Entry<String, Object> entry : message.getHeaders().entrySet()) {
             final String key = entry.getKey();
+
+            // skip headers that are path-params as we do not want to leak them back to the caller
+            if (pathParams.containsKey(key)) {
+                continue;
+            }
+
             final Object value = entry.getValue();
             // use an iterator as there can be multiple values. (must not use a delimiter)
             final Iterator<?> it = ObjectHelper.createIterator(value, null, true);
@@ -170,27 +175,26 @@ public final class VertxPlatformHttpSupport {
 
     static Future<Void> writeResponse(
             RoutingContext ctx, Exchange camelExchange, HeaderFilterStrategy headerFilterStrategy, boolean muteExceptions) {
-        final Object body = toHttpResponse(ctx.response(), camelExchange.getMessage(), headerFilterStrategy, muteExceptions);
         final Promise<Void> promise = Promise.promise();
-
-        if (body == null) {
-            LOGGER.trace("No payload to send as reply for exchange: {}", camelExchange);
-            ctx.end();
-            promise.complete();
-        } else if (body instanceof String) {
-            ctx.end((String) body);
-            promise.complete();
-        } else if (body instanceof InputStream) {
-            writeResponseAs(promise, ctx, (InputStream) body);
-        } else if (body instanceof Buffer) {
-            ctx.end((Buffer) body);
-            promise.complete();
-        } else {
-            try {
+        try {
+            final Object body = toHttpResponse(ctx, camelExchange.getMessage(), headerFilterStrategy, muteExceptions);
+            if (body == null) {
+                LOGGER.trace("No payload to send as reply for exchange: {}", camelExchange);
+                ctx.end();
+                promise.complete();
+            } else if (body instanceof String) {
+                ctx.end((String) body);
+                promise.complete();
+            } else if (body instanceof InputStream) {
+                writeResponseAs(promise, ctx, (InputStream) body);
+            } else if (body instanceof Buffer) {
+                ctx.end((Buffer) body);
+                promise.complete();
+            } else {
                 writeResponseAsFallback(promise, camelExchange, body, ctx);
-            } catch (NoTypeConversionAvailableException e) {
-                promise.fail(e);
             }
+        } catch (Exception e) {
+            promise.fail(e);
         }
 
         return promise.future();

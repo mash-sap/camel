@@ -26,12 +26,12 @@ import org.apache.camel.v1.Integration;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-class IntegrationLogsTest extends KubeBaseTest {
+class IntegrationLogsTest extends CamelKBaseTest {
 
     @Test
     public void shouldHandleIntegrationsNotFound() throws Exception {
         IntegrationLogs command = createCommand();
-        command.name = "mickey-mouse";
+        command.withName("mickey-mouse");
         command.doCall();
 
         Assertions.assertEquals("Integration mickey-mouse not found", printer.getOutput());
@@ -45,7 +45,7 @@ class IntegrationLogsTest extends KubeBaseTest {
         Pod pod = new PodBuilder()
                 .withNewMetadata()
                 .withName(integration.getMetadata().getName())
-                .withLabels(Collections.singletonMap(KubeCommand.INTEGRATION_LABEL, integration.getMetadata().getName()))
+                .withLabels(Collections.singletonMap(CamelKCommand.INTEGRATION_LABEL, integration.getMetadata().getName()))
                 .endMetadata()
                 .withNewStatus()
                 .withPhase("Running")
@@ -56,8 +56,9 @@ class IntegrationLogsTest extends KubeBaseTest {
 
         IntegrationLogs command = createCommand();
 
-        command.name = "routes";
-        command.doCall();
+        command.withName("routes");
+        int exit = command.doCall();
+        Assertions.assertEquals(0, exit);
     }
 
     private IntegrationLogs createCommand() {

@@ -114,7 +114,7 @@ const sources = {
     },
     json: {
       source: [
-        '../components/{*,*/*,*/*/*}/src/generated/resources/org/apache/camel/**/*.json',
+        '../components/{*,*/*,*/*/*}/src/generated/resources/META-INF/org/apache/camel/**/*.json',
       ],
       destination: 'components/modules/ROOT/examples/json',
       filter: (content) => JSON.parse(content).component, // check if there is a "component" key at the root
@@ -127,8 +127,8 @@ const sources = {
     },
     json: {
       source: [
-        '../components/{*,*/*,*/*/*}/src/generated/resources/org/apache/camel/**/*.json',
-        '../core/camel-core-model/src/generated/resources/org/apache/camel/model/dataformat/*.json',
+        '../components/{*,*/*,*/*/*}/src/generated/resources/META-INF/org/apache/camel/**/*.json',
+        '../core/camel-core-model/src/generated/resources/META-INF/org/apache/camel/model/dataformat/*.json',
       ],
       destination: 'components/modules/dataformats/examples/json',
       filter: (content) => JSON.parse(content).dataformat, // check if there is a "dataformat" key at the root
@@ -147,9 +147,9 @@ const sources = {
     },
     json: {
       source: [
-        '../components/{*,*/*,*/*/*}/src/generated/resources/org/apache/camel/*/**/*.json',
-        '../core/camel-core-languages/src/generated/resources/org/apache/camel/language/**/*.json',
-        '../core/camel-core-model/src/generated/resources/org/apache/camel/model/language/*.json',
+        '../components/{*,*/*,*/*/*}/src/generated/resources/META-INF/org/apache/camel/*/**/*.json',
+        '../core/camel-core-languages/src/generated/resources/META-INF/org/apache/camel/language/**/*.json',
+        '../core/camel-core-model/src/generated/resources/META-INF/org/apache/camel/model/language/*.json',
       ],
       destination: 'components/modules/languages/examples/json',
       filter: (content) => JSON.parse(content).language, // check if there is a "language" key at the root
@@ -160,7 +160,6 @@ const sources = {
   // +** xref:groovy-dsl.adoc[Groovy Dsl]
   // +** xref:js-dsl.adoc[JavaScript Dsl]
   // +** xref:java-xml-jaxb-dsl.adoc[Jaxb XML Dsl]
-  // +** xref:kotlin-dsl.adoc[Kotlin Dsl]
   // +** xref:java-xml-io-dsl.adoc[XML Dsl]
   //These seem to have no content, just a non-xref link to the user manual,
   // where the dsls are not actually explained.  Should the sources be removed?
@@ -194,7 +193,7 @@ const sources = {
     },
     json: {
       source: [
-        '../core/camel-core-model/src/generated/resources/org/apache/camel/model/**/*.json',
+        '../core/camel-core-model/src/generated/resources/META-INF/org/apache/camel/model/**/*.json',
       ],
       destination: '../core/camel-core-engine/src/main/docs/modules/eips/examples/json',
       filter: (content) => {
@@ -271,7 +270,7 @@ const tasks = Array.from(sourcesMap).flatMap(([type, definition]) => {
   // by default that's only index.adoc, index.adoc is not symlinked
   // so we don't want to remove it
   const clean = (destination, keep) => {
-    const deleteAry = [`${destination}/*`] // files in destination needs to be deleted
+    const deleteAry = [`${destination}/*`] // files in destination needs to be deleted */
     // append any exceptions, i.e. files to keep at the destination
     deleteAry.push(...(keep || ['index.adoc']).map((file) => `!${destination}/${file}`))
     return deleteAsync(deleteAry, {
@@ -346,7 +345,7 @@ const tasks = Array.from(sourcesMap).flatMap(([type, definition]) => {
 
   // creates symlinks from source to destination for every example
   // file referenced from .adoc file in the source maintaining the
-  // basedir from the file path, i.e. symlinking from a deep hiearchy
+  // basedir from the file path, i.e. symlinking from a deep hierarchy
   const createExampleSymlinks = (source, destination) => {
     const extractExamples = function (file, enc, done) {
       const asciidoc = file.contents.toString()

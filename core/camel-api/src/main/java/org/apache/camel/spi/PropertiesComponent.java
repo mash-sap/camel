@@ -85,6 +85,14 @@ public interface PropertiesComponent extends StaticService {
     Optional<String> resolveProperty(String key);
 
     /**
+     * Returns metadata about a property which has successfully been resolved.
+     *
+     * @param  key the name of the property
+     * @return     the property value and metadata if present
+     */
+    Optional<PropertiesResolvedValue> getResolvedValue(String key);
+
+    /**
      * Loads the properties from the default locations and sources.
      *
      * @return the properties loaded.
@@ -113,6 +121,15 @@ public interface PropertiesComponent extends StaticService {
      * @return        the properties loaded.
      */
     Properties loadProperties(Predicate<String> filter);
+
+    /**
+     * Loads the properties from the default locations and extract properties by the given prefix.
+     *
+     * @param  optionPrefix prefix to filter
+     * @param  nested       whether to include nested properties
+     * @return              the properties loaded with option prefix removed.
+     */
+    Properties extractProperties(String optionPrefix, boolean nested);
 
     /**
      * Loads the properties from the default locations and sources filtering them out according to a predicate, and maps

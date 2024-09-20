@@ -34,7 +34,7 @@ import org.apache.camel.spi.NodeIdFactory;
  */
 @XmlType(name = "optionalIdentifiedDefinition")
 @XmlAccessorType(XmlAccessType.PROPERTY)
-// must use XmlAccessType.PROPERTY which is required by camel-spring / camel-blueprint for their namespace parsers
+// must use XmlAccessType.PROPERTY which is required by camel-spring for its namespace parsers
 public abstract class OptionalIdentifiedDefinition<T extends OptionalIdentifiedDefinition<T>>
         implements NamedNode, IdAware, CamelContextAware {
 
@@ -44,6 +44,18 @@ public abstract class OptionalIdentifiedDefinition<T extends OptionalIdentifiedD
     private String description;
     private int lineNumber = -1;
     private String location;
+
+    protected OptionalIdentifiedDefinition() {
+    }
+
+    protected OptionalIdentifiedDefinition(OptionalIdentifiedDefinition<?> source) {
+        this.camelContext = source.camelContext;
+        this.id = source.id;
+        this.customId = source.customId;
+        this.description = source.description;
+        this.lineNumber = source.lineNumber;
+        this.location = source.location;
+    }
 
     @Override
     public CamelContext getCamelContext() {

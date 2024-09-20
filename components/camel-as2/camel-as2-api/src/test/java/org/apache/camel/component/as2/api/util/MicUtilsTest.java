@@ -19,23 +19,26 @@ package org.apache.camel.component.as2.api.util;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.Security;
+import java.util.Base64;
 
 import org.apache.camel.component.as2.api.AS2Header;
 import org.apache.camel.component.as2.api.AS2MimeType;
 import org.apache.camel.component.as2.api.AS2TransferEncoding;
 import org.apache.camel.component.as2.api.entity.ApplicationEDIFACTEntity;
 import org.apache.camel.component.as2.api.util.MicUtils.ReceivedContentMic;
-import org.apache.http.HttpEntityEnclosingRequest;
-import org.apache.http.HttpVersion;
-import org.apache.http.entity.BasicHttpEntity;
-import org.apache.http.message.BasicHttpEntityEnclosingRequest;
+import org.apache.hc.core5.http.ContentType;
+import org.apache.hc.core5.http.io.entity.BasicHttpEntity;
+import org.apache.hc.core5.http.message.BasicClassicHttpRequest;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.camel.component.as2.api.util.MicUtils.createMic;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
@@ -77,18 +80,18 @@ public class MicUtilsTest {
     private static final String EXPECTED_ENCODED_MESSAGE_DIGEST = "XUt+ug5GEDD0X9+Nv8DGYZZThOQ=";
 
     @BeforeEach
-    public void setUp() throws Exception {
+    public void setUp() {
         Security.addProvider(new BouncyCastleProvider());
     }
 
     @AfterEach
-    public void tearDown() throws Exception {
+    public void tearDown() {
     }
 
     @Test
     public void createReceivedContentMicTest() throws Exception {
 
-        HttpEntityEnclosingRequest request = new BasicHttpEntityEnclosingRequest("POST", "/", HttpVersion.HTTP_1_1);
+        BasicClassicHttpRequest request = new BasicClassicHttpRequest("POST", "/");
         request.addHeader(AS2Header.DISPOSITION_NOTIFICATION_OPTIONS, DISPOSITION_NOTIFICATION_OPTIONS_VALUE);
         request.addHeader(AS2Header.CONTENT_TYPE, CONTENT_TYPE_VALUE);
 
@@ -96,9 +99,7 @@ public class MicUtilsTest {
                 = new ApplicationEDIFACTEntity(
                         EDI_MESSAGE, StandardCharsets.US_ASCII.name(), AS2TransferEncoding.NONE, true, "filename.txt");
         InputStream is = edifactEntity.getContent();
-        BasicHttpEntity basicEntity = new BasicHttpEntity();
-        basicEntity.setContent(is);
-        basicEntity.setContentType(CONTENT_TYPE_VALUE);
+        BasicHttpEntity basicEntity = new BasicHttpEntity(is, ContentType.create(CONTENT_TYPE_VALUE));
         request.setEntity(basicEntity);
 
         ReceivedContentMic receivedContentMic = MicUtils.createReceivedContentMic(request, null, null);
@@ -111,4 +112,39 @@ public class MicUtilsTest {
                 "Unexpected encoded message digest value");
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = { "md5", "sha1", "sha256", "sha384", "sha512" })
+    public void createReceivedContentMicTest(String requestedMicalg) throws Exception {
+        String DNO_TEMPLATE = "signed-receipt-protocol=optional, pkcs7-signature; signed-receipt-micalg = required, %s";
+
+        BasicClassicHttpRequest request = new BasicClassicHttpRequest("POST", "/");
+        request.addHeader(AS2Header.DISPOSITION_NOTIFICATION_OPTIONS, DNO_TEMPLATE.formatted(requestedMicalg));
+        request.addHeader(AS2Header.CONTENT_TYPE, CONTENT_TYPE_VALUE);
+
+        ApplicationEDIFACTEntity edifactEntity
+                = new ApplicationEDIFACTEntity(
+                        EDI_MESSAGE, StandardCharsets.US_ASCII.name(), AS2TransferEncoding.NONE, true, "filename.txt");
+        InputStream is = edifactEntity.getContent();
+        BasicHttpEntity basicEntity = new BasicHttpEntity(is, ContentType.create(CONTENT_TYPE_VALUE));
+        request.setEntity(basicEntity);
+
+        ReceivedContentMic receivedContentMic = MicUtils.createReceivedContentMic(request, null, null);
+        assertNotNull(receivedContentMic, "Failed to create Received Content MIC");
+        LOG.debug("Digest Algorithm: {}", receivedContentMic.getDigestAlgorithmId());
+        assertEquals(requestedMicalg, receivedContentMic.getDigestAlgorithmId(),
+                "Unexpected digest algorithm value");
+        LOG.debug("Encoded Message Digest: {}", receivedContentMic.getEncodedMessageDigest());
+        String expectedMic = getMicContent(EDI_MESSAGE, requestedMicalg);
+        assertEquals(expectedMic, receivedContentMic.getEncodedMessageDigest(),
+                "Unexpected encoded message digest value");
+    }
+
+    private String getMicContent(String content, String algorithm) {
+        return new String(
+                Base64.getEncoder().encode(
+                        createMic(content
+                                .replaceAll("\\n", "\r\n")
+                                .getBytes(StandardCharsets.US_ASCII), algorithm)),
+                StandardCharsets.US_ASCII);
+    }
 }

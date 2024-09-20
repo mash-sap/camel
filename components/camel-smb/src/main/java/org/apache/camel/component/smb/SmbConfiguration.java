@@ -16,6 +16,8 @@
  */
 package org.apache.camel.component.smb;
 
+import com.hierynomus.smbj.SmbConfig;
+import org.apache.camel.component.file.GenericFileExist;
 import org.apache.camel.spi.IdempotentRepository;
 import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.UriParam;
@@ -27,30 +29,46 @@ public class SmbConfiguration {
 
     protected static final int DEFAULT_IDEMPOTENT_CACHE_SIZE = 1000;
 
-    @UriParam(label = "security", description = "The username required to access the share", secret = true)
-    private String username;
+    @Metadata(required = false)
+    @UriParam(label = "producer", description = "What action to take if the SMB file already exists",
+              defaultValue = "Ignore", enums = "Override,Append,Fail,Ignore,Move,TryRename")
+    private GenericFileExist fileExist;
 
-    @UriParam(label = "security", description = "The password to access the share", secret = true)
-    private String password;
+    @Metadata(required = false, defaultValue = "false")
+    @UriParam(label = "producer", description = "Whether to create parent directory if it does not exist",
+              defaultValue = "false")
+    private boolean autoCreate;
 
-    @UriParam(label = "security", description = "The user domain")
-    private String domain;
+    @Metadata(required = false, defaultValue = "2048")
+    @UriParam(label = "producer", description = "Read buffer size when for file being produced", defaultValue = "2048")
+    private int readBufferSize;
 
     @Metadata(required = true)
     @UriParam(description = "The path, within the share, to consume the files from")
     private String path;
-
     @UriParam(defaultValue = "*.txt", description = "The search pattern used to list the files")
     private String searchPattern;
-
+    @UriParam(label = "security", description = "The username required to access the share", secret = true)
+    private String username;
+    @UriParam(label = "security", description = "The password to access the share", secret = true)
+    private String password;
+    @UriParam(label = "security", description = "The user domain")
+    private String domain;
     @UriParam(label = "advanced",
               description = "An optional SMB I/O bean to use to setup the file access attributes when reading/writing a file")
     private SmbIOBean smbIoBean = new SmbReadBean();
-
-    @UriParam(label = "advanced,consumer", description = "A pluggable repository org.apache.camel.spi.IdempotentRepository "
-                                                         + "which by default use MemoryIdempotentRepository if none is specified.")
+    @UriParam(label = "advanced", description = "A pluggable repository org.apache.camel.spi.IdempotentRepository "
+                                                + "which by default use MemoryIdempotentRepository if none is specified.")
     protected IdempotentRepository idempotentRepository
             = MemoryIdempotentRepository.memoryIdempotentRepository(DEFAULT_IDEMPOTENT_CACHE_SIZE);
+    @Metadata(autowired = true)
+    @UriParam(label = "advanced",
+              description = "An optional SMB client configuration, can be used to configure client specific "
+                            + " configurations, like timeouts")
+    private SmbConfig smbConfig;
+    @UriParam(label = "consumer", defaultValue = "false",
+              description = "If a directory, will look for files in all the sub-directories as well.")
+    protected boolean recursive;
 
     public String getUsername() {
         return username;
@@ -70,6 +88,18 @@ public class SmbConfiguration {
 
     public String getDomain() {
         return domain;
+    }
+
+    public boolean isRecursive() {
+        return recursive;
+    }
+
+    public void setRecursive(boolean recursive) {
+        this.recursive = recursive;
+    }
+
+    public void setRecursive(String recursiveString) {
+        this.recursive = Boolean.valueOf(recursiveString);
     }
 
     public void setDomain(String domain) {
@@ -106,5 +136,41 @@ public class SmbConfiguration {
 
     public void setIdempotentRepository(IdempotentRepository idempotentRepository) {
         this.idempotentRepository = idempotentRepository;
+    }
+
+    public SmbConfig getSmbConfig() {
+        return smbConfig;
+    }
+
+    public void setSmbConfig(SmbConfig smbConfig) {
+        this.smbConfig = smbConfig;
+    }
+
+    public GenericFileExist getFileExist() {
+        return fileExist;
+    }
+
+    public void setFileExist(GenericFileExist fileExist) {
+        this.fileExist = fileExist;
+    }
+
+    public boolean isAutoCreate() {
+        return autoCreate;
+    }
+
+    public void setAutoCreate(String autoCreate) {
+        this.autoCreate = Boolean.valueOf(autoCreate);
+    }
+
+    public void setAutoCreate(boolean autoCreate) {
+        this.autoCreate = autoCreate;
+    }
+
+    public void setReadBufferSize(int readBufferSize) {
+        this.readBufferSize = readBufferSize;
+    }
+
+    public int getReadBufferSize() {
+        return readBufferSize;
     }
 }

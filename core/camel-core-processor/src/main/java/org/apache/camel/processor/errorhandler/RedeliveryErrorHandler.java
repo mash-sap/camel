@@ -62,6 +62,8 @@ import org.apache.camel.util.URISupport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static java.util.Objects.requireNonNull;
+
 /**
  * Base redeliverable error handler that also supports a final dead letter queue in case all redelivery attempts fail.
  * <p/>
@@ -117,9 +119,9 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport
         ObjectHelper.notNull(redeliveryPolicy, "RedeliveryPolicy", this);
 
         this.camelContext = camelContext;
-        this.reactiveExecutor = camelContext.getCamelContextExtension().getReactiveExecutor();
+        this.reactiveExecutor = requireNonNull(camelContext.getCamelContextExtension().getReactiveExecutor());
         this.awaitManager = PluginHelper.getAsyncProcessorAwaitManager(camelContext);
-        this.shutdownStrategy = camelContext.getShutdownStrategy();
+        this.shutdownStrategy = requireNonNull(camelContext.getShutdownStrategy());
         this.redeliveryProcessor = redeliveryProcessor;
         this.deadLetter = deadLetter;
         this.output = output;
@@ -165,30 +167,6 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport
         if (customExceptionPolicy != null) {
             exceptionPolicy = customExceptionPolicy;
         }
-    }
-
-    RedeliveryErrorHandler(Logger log) {
-        // used for eager loading
-        camelContext = null;
-        reactiveExecutor = null;
-        awaitManager = null;
-        shutdownStrategy = null;
-        deadLetter = null;
-        deadLetterUri = null;
-        deadLetterHandleNewException = false;
-        redeliveryProcessor = null;
-        redeliveryPolicy = null;
-        retryWhilePolicy = null;
-        logger = null;
-        useOriginalMessagePolicy = false;
-        useOriginalBodyPolicy = false;
-        redeliveryEnabled = false;
-        simpleTask = false;
-        exchangeFormatter = null;
-        customExchangeFormatter = false;
-        onPrepareProcessor = null;
-        onExceptionProcessor = null;
-        log.trace("Loaded {}", RedeliveryErrorHandler.class.getName());
     }
 
     @Override
@@ -515,13 +493,7 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport
                 if (!found) {
                     // okay before adding suppression then we must be sure its not referring to same method
                     // which otherwise can lead to add the same exception over and over again
-                    StackTraceElement[] ste1 = e.getStackTrace();
-                    StackTraceElement[] ste2 = previous.getStackTrace();
-                    boolean same = false;
-                    if (ste1 != null && ste2 != null && ste1.length > 0 && ste2.length > 0) {
-                        same = ste1[0].getClassName().equals(ste2[0].getClassName())
-                                && ste1[0].getLineNumber() == ste2[0].getLineNumber();
-                    }
+                    final boolean same = isSame(e, previous);
                     if (!same) {
                         e.addSuppressed(previous);
                     }
@@ -625,9 +597,7 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport
                             : (redeliveryPolicy.isLogExhaustedMessageBody() || camelContext.isLogExhaustedMessageBody()
                                     ? exchangeFormatter : null);
                     String routeStackTrace = MessageHelper.dumpMessageHistoryStacktrace(exchange, formatter, false);
-                    if (routeStackTrace != null) {
-                        msg = msg + "\n" + routeStackTrace;
-                    }
+                    msg = msg + "\n" + routeStackTrace;
                 }
 
                 if (logger.getLevel() == LoggingLevel.ERROR) {
@@ -648,9 +618,7 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport
                                     ? exchangeFormatter : null);
                     String routeStackTrace = MessageHelper.dumpMessageHistoryStacktrace(exchange, formatter,
                             e != null && redeliveryPolicy.isLogStackTrace());
-                    if (routeStackTrace != null) {
-                        msg = msg + "\n" + routeStackTrace;
-                    }
+                    msg = msg + "\n" + routeStackTrace;
                 }
 
                 if (e != null && redeliveryPolicy.isLogStackTrace()) {
@@ -1018,13 +986,7 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport
                 if (!found) {
                     // okay before adding suppression then we must be sure its not referring to same method
                     // which otherwise can lead to add the same exception over and over again
-                    StackTraceElement[] ste1 = e.getStackTrace();
-                    StackTraceElement[] ste2 = previous.getStackTrace();
-                    boolean same = false;
-                    if (ste1 != null && ste2 != null && ste1.length > 0 && ste2.length > 0) {
-                        same = ste1[0].getClassName().equals(ste2[0].getClassName())
-                                && ste1[0].getLineNumber() == ste2[0].getLineNumber();
-                    }
+                    final boolean same = isSame(e, previous);
                     if (!same) {
                         e.addSuppressed(previous);
                     }
@@ -1244,12 +1206,10 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport
                         // create log message
                         String msg = "Failed delivery for " + ExchangeHelper.logIds(exchange);
                         msg = msg + ". Exhausted after delivery attempt: " + redeliveryCounter + " caught: " + caught;
-                        if (processor != null) {
-                            if (isDeadLetterChannel && deadLetterUri != null) {
-                                msg = msg + ". Handled by DeadLetterChannel: [" + URISupport.sanitizeUri(deadLetterUri) + "]";
-                            } else {
-                                msg = msg + ". Processed by failure processor: " + processor;
-                            }
+                        if (isDeadLetterChannel && deadLetterUri != null) {
+                            msg = msg + ". Handled by DeadLetterChannel: [" + URISupport.sanitizeUri(deadLetterUri) + "]";
+                        } else {
+                            msg = msg + ". Processed by failure processor: " + processor;
                         }
 
                         // log that we failed delivery as we are exhausted
@@ -1290,7 +1250,7 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport
                     String msg = "Failed delivery for " + ExchangeHelper.logIds(exchange);
                     msg = msg + ". Exhausted after delivery attempt: " + redeliveryCounter + " caught: " + caught;
                     if (processor != null) {
-                        if (isDeadLetterChannel && deadLetterUri != null) {
+                        if (deadLetterUri != null) {
                             msg = msg + ". Handled by DeadLetterChannel: [" + URISupport.sanitizeUri(deadLetterUri) + "]";
                         } else {
                             msg = msg + ". Processed by failure processor: " + processor;
@@ -1488,9 +1448,7 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport
                             : (currentRedeliveryPolicy.isLogExhaustedMessageBody() || camelContext.isLogExhaustedMessageBody()
                                     ? exchangeFormatter : null);
                     String routeStackTrace = MessageHelper.dumpMessageHistoryStacktrace(exchange, formatter, false);
-                    if (routeStackTrace != null) {
-                        msg = msg + "\n" + routeStackTrace;
-                    }
+                    msg = msg + "\n" + routeStackTrace;
                 }
 
                 if (newLogLevel == LoggingLevel.ERROR) {
@@ -1511,9 +1469,7 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport
                                     ? exchangeFormatter : null);
                     String routeStackTrace
                             = MessageHelper.dumpMessageHistoryStacktrace(exchange, formatter, e != null && logStackTrace);
-                    if (routeStackTrace != null) {
-                        msg = msg + "\n" + routeStackTrace;
-                    }
+                    msg = msg + "\n" + routeStackTrace;
                 }
 
                 if (e != null && logStackTrace) {
@@ -1574,6 +1530,7 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport
          * This task is for the synchronous blocking. If using async delayed then a scheduled thread pool is used for
          * sleeping and trigger redeliveries.
          */
+        @SuppressWarnings("BusyWait")
         public boolean sleep() throws InterruptedException {
             // for small delays then just sleep
             if (redeliveryDelay < 1000) {
@@ -1603,6 +1560,17 @@ public abstract class RedeliveryErrorHandler extends ErrorHandlerSupport
 
             return true;
         }
+    }
+
+    private static boolean isSame(Exception e, Throwable previous) {
+        StackTraceElement[] ste1 = e.getStackTrace();
+        StackTraceElement[] ste2 = previous.getStackTrace();
+        boolean same = false;
+        if (ste1 != null && ste2 != null && ste1.length > 0 && ste2.length > 0) {
+            same = ste1[0].getClassName().equals(ste2[0].getClassName())
+                    && ste1[0].getLineNumber() == ste2[0].getLineNumber();
+        }
+        return same;
     }
 
     /**

@@ -682,6 +682,18 @@ public enum ZendeskApiMethod implements ApiMethod {
         "getArticles",
         arg("section", org.zendesk.client.v2.model.hc.Section.class)),
 
+    GET_ARTICLES_4(
+        Iterable.class,
+        "getArticles",
+        arg("category", org.zendesk.client.v2.model.hc.Category.class),
+        arg("locale", String.class)),
+
+    GET_ARTICLES_5(
+        Iterable.class,
+        "getArticles",
+        arg("section", org.zendesk.client.v2.model.hc.Section.class),
+        arg("locale", String.class)),
+
     GET_ARTICLES_FROM_ALL_LABELS(
         Iterable.class,
         "getArticlesFromAllLabels",
@@ -924,6 +936,10 @@ public enum ZendeskApiMethod implements ApiMethod {
         java.util.Map.class,
         "getIncrementalTicketsResult",
         arg("unixEpochTime", long.class)),
+
+    GET_JIRA_LINKS(
+        Iterable.class,
+        "getJiraLinks"),
 
     GET_JOB_STATUS(
         org.zendesk.client.v2.model.JobStatus.class,

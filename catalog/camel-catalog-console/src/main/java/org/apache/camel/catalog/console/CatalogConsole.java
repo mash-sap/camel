@@ -29,14 +29,15 @@ import org.apache.camel.tooling.model.ArtifactModel;
 import org.apache.camel.tooling.model.OtherModel;
 import org.apache.camel.util.json.JsonObject;
 
-@DevConsole("catalog")
+@DevConsole(name = "catalog", description = "Information about used Camel artifacts")
+@SuppressWarnings("java:S2160")
 public class CatalogConsole extends AbstractDevConsole {
 
     private static final String CP = System.getProperty("java.class.path");
     private final CamelCatalog catalog = new DefaultCamelCatalog(true);
 
     public CatalogConsole() {
-        super("camel", "catalog", "Catalog", "Lists all the used Camel Components");
+        super("camel", "catalog", "Catalog", "Information about used Camel artifacts");
     }
 
     @Override

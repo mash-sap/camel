@@ -20,9 +20,9 @@ package org.apache.camel.component.aws2.ddbstream.transform;
 import java.util.Map;
 
 import org.apache.camel.Message;
+import org.apache.camel.cloudevents.CloudEvent;
+import org.apache.camel.cloudevents.CloudEvents;
 import org.apache.camel.component.aws2.ddbstream.Ddb2StreamConstants;
-import org.apache.camel.component.cloudevents.CloudEvent;
-import org.apache.camel.component.cloudevents.CloudEvents;
 import org.apache.camel.spi.DataType;
 import org.apache.camel.spi.DataTypeTransformer;
 import org.apache.camel.spi.Transformer;
@@ -46,7 +46,7 @@ public class Ddb2StreamCloudEventDataTypeTransformer extends Transformer {
 
         if (message.getHeaders().containsKey(Ddb2StreamConstants.EVENT_SOURCE)) {
             headers.put(CloudEvent.CAMEL_CLOUD_EVENT_SOURCE,
-                    "aws.s3.ddbstream." + message.getHeader(Ddb2StreamConstants.EVENT_SOURCE, String.class));
+                    "aws.ddbstream." + message.getHeader(Ddb2StreamConstants.EVENT_SOURCE, String.class));
         }
 
         headers.put(CloudEvent.CAMEL_CLOUD_EVENT_SUBJECT, message.getHeader(Ddb2StreamConstants.EVENT_ID, String.class));

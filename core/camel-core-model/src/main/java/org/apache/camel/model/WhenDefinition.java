@@ -34,6 +34,10 @@ public class WhenDefinition extends OutputExpressionNode {
     public WhenDefinition() {
     }
 
+    protected WhenDefinition(WhenDefinition source) {
+        super(source);
+    }
+
     public WhenDefinition(Predicate predicate) {
         super(predicate);
     }
@@ -43,12 +47,17 @@ public class WhenDefinition extends OutputExpressionNode {
     }
 
     @Override
+    public WhenDefinition copyDefinition() {
+        return new WhenDefinition(this);
+    }
+
+    @Override
     public String toString() {
         return "When[" + description() + " -> " + getOutputs() + "]";
     }
 
     protected String description() {
-        StringBuilder sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder(256);
         if (getExpression() != null) {
             String language = getExpression().getLanguage();
             if (language != null) {

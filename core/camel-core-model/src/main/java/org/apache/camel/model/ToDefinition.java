@@ -46,6 +46,13 @@ public class ToDefinition extends SendDefinition<ToDefinition> {
     public ToDefinition() {
     }
 
+    protected ToDefinition(ToDefinition source) {
+        super(source);
+        this.variableSend = source.variableSend;
+        this.variableReceive = source.variableReceive;
+        this.pattern = source.pattern;
+    }
+
     public ToDefinition(String uri) {
         this();
         setUri(uri);
@@ -127,5 +134,9 @@ public class ToDefinition extends SendDefinition<ToDefinition> {
      */
     public void setVariableReceive(String variableReceive) {
         this.variableReceive = variableReceive;
+    }
+
+    public ToDefinition copyDefinition() {
+        return new ToDefinition(this);
     }
 }

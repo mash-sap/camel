@@ -21,12 +21,12 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 
 import org.apache.camel.Exchange;
-import org.apache.camel.component.cloudevents.CloudEvent;
-import org.apache.camel.component.cloudevents.CloudEvents;
+import org.apache.camel.cloudevents.CloudEvent;
+import org.apache.camel.cloudevents.CloudEvents;
 import org.apache.camel.impl.DefaultCamelContext;
-import org.apache.camel.impl.engine.TransformerKey;
 import org.apache.camel.spi.DataType;
 import org.apache.camel.spi.Transformer;
+import org.apache.camel.spi.TransformerKey;
 import org.apache.camel.support.DefaultExchange;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -96,7 +96,7 @@ class CloudEventJsonDataTypeTransformerTest {
     @Test
     public void shouldLookupTransformer() throws Exception {
         Transformer transformer
-                = camelContext.getTransformerRegistry().resolveTransformer(new TransformerKey("application-cloudevents/json"));
+                = camelContext.getTransformerRegistry().resolveTransformer(new TransformerKey("application-cloudevents+json"));
         Assertions.assertNotNull(transformer);
         Assertions.assertEquals(CloudEventJsonDataTypeTransformer.class, transformer.getClass());
     }

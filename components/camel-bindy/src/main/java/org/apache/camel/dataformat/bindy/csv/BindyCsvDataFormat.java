@@ -244,7 +244,18 @@ public class BindyCsvDataFormat extends BindyAbstractDataFormat {
                     separators.add(separators.get(separators.size() - 1));
                 }
 
-                String[] tokens = pattern.split(trimmedLine, factory.getAutospanLine() ? factory.getMaxpos() : -1);
+                Pattern delimiterPattern = Pattern.compile(Pattern.quote(quote) + "(.*?)" + Pattern.quote(quote));
+                Matcher delimiterMatcher = delimiterPattern.matcher(trimmedLine);
+
+                int escapedSubstringToHandle = 0;
+                // Find and print delimited substrings
+                while (delimiterMatcher.find()) {
+                    String substring = delimiterMatcher.group();
+                    escapedSubstringToHandle += pattern.split(substring).length - 1;
+                }
+
+                String[] tokens = pattern.split(trimmedLine,
+                        factory.getAutospanLine() ? factory.getMaxpos() + escapedSubstringToHandle : -1);
 
                 List<String> result = Arrays.asList(tokens);
 
@@ -289,7 +300,7 @@ public class BindyCsvDataFormat extends BindyAbstractDataFormat {
         // if the separator char is also inside a quoted token, therefore we
         // need
         // to fix this afterwards
-        StringBuilder current = new StringBuilder();
+        StringBuilder current = new StringBuilder(256);
         boolean inProgress = false;
         List<String> answer = new ArrayList<>();
         int idxSeparator = 0;

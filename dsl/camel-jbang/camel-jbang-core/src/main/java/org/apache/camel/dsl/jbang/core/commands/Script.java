@@ -47,14 +47,14 @@ public class Script extends CamelCommand {
     boolean logging;
 
     @CommandLine.Option(names = { "--logging-level" }, completionCandidates = LoggingLevelCompletionCandidates.class,
-                        defaultValue = "info", description = "Logging level")
+                        defaultValue = "info", description = "Logging level (${COMPLETION-CANDIDATES})")
     String loggingLevel;
 
     @CommandLine.Option(names = { "--properties" },
                         description = "Load properties file for route placeholders (ex. /path/to/file.properties")
     String propertiesFiles;
 
-    @CommandLine.Option(names = { "-p", "--prop", "--property" }, description = "Additional properties (override existing)",
+    @CommandLine.Option(names = { "--prop", "--property" }, description = "Additional properties (override existing)",
                         arity = "0")
     String[] property;
 

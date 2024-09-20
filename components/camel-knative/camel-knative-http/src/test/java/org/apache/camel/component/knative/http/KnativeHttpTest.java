@@ -33,8 +33,8 @@ import org.apache.camel.FailedToStartRouteException;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.builder.RouteBuilder;
-import org.apache.camel.component.cloudevents.CloudEvent;
-import org.apache.camel.component.cloudevents.CloudEvents;
+import org.apache.camel.cloudevents.CloudEvent;
+import org.apache.camel.cloudevents.CloudEvents;
 import org.apache.camel.component.knative.KnativeComponent;
 import org.apache.camel.component.knative.KnativeEndpoint;
 import org.apache.camel.component.knative.spi.Knative;
@@ -44,6 +44,7 @@ import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.support.service.ServiceHelper;
 import org.apache.camel.test.AvailablePortFinder;
 import org.apache.camel.util.ObjectHelper;
+import org.apache.camel.util.StringHelper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -344,7 +345,8 @@ public class KnativeHttpTest {
         mock.expectedMessageCount(1);
 
         if (Objects.equals(CloudEvents.v1_0.version(), ce.version())
-                || Objects.equals(CloudEvents.v1_0_1.version(), ce.version())) {
+                || Objects.equals(CloudEvents.v1_0_1.version(), ce.version())
+                || Objects.equals(CloudEvents.v1_0_2.version(), ce.version())) {
             given()
                     .contentType(Knative.MIME_STRUCTURED_CONTENT_MODE)
                     .body(
@@ -1479,6 +1481,51 @@ public class KnativeHttpTest {
 
     @ParameterizedTest
     @EnumSource(CloudEvents.class)
+    void testHeadersOverrideFromEnvPropertyPlaceholder(CloudEvent ce) throws Exception {
+        final KnativeHttpServer server = new KnativeHttpServer(context);
+        final String typeHeaderKey = httpAttribute(ce, CloudEvent.CAMEL_CLOUD_EVENT_TYPE);
+        final String typeHeaderVal = UUID.randomUUID().toString();
+        final String sourceHeaderKey = httpAttribute(ce, CloudEvent.CAMEL_CLOUD_EVENT_SOURCE);
+        final String sourceHeaderVal = UUID.randomUUID().toString();
+
+        configureKnativeComponent(
+                context,
+                ce,
+                endpoint(
+                        Knative.EndpointKind.sink,
+                        "ep",
+                        String.format("http://%s:%d", server.getHost(), server.getPort()),
+                        Map.of(
+                                Knative.KNATIVE_CLOUD_EVENT_TYPE, "org.apache.camel.event",
+                                Knative.CONTENT_TYPE, "text/plain",
+                                Knative.KNATIVE_CE_OVERRIDE_PREFIX + typeHeaderKey,
+                                "{{someProperty:%s}}".formatted(typeHeaderVal),
+                                Knative.KNATIVE_CE_OVERRIDE_PREFIX + sourceHeaderKey,
+                                "{{someProperty:%s}}".formatted(sourceHeaderVal))));
+
+        RouteBuilder.addRoutes(context, b -> {
+            b.from("direct:start")
+                    .to("knative:endpoint/ep");
+        });
+
+        context.start();
+        try {
+            server.start();
+            template.sendBody("direct:start", "");
+
+            HttpServerRequest request = server.poll(30, TimeUnit.SECONDS);
+            assertThat(request.getHeader(httpAttribute(ce, CloudEvent.CAMEL_CLOUD_EVENT_VERSION))).isEqualTo(ce.version());
+            assertThat(request.getHeader(httpAttribute(ce, CloudEvent.CAMEL_CLOUD_EVENT_TYPE))).isEqualTo(typeHeaderVal);
+            assertThat(request.getHeader(httpAttribute(ce, CloudEvent.CAMEL_CLOUD_EVENT_ID))).isNotNull();
+            assertThat(request.getHeader(httpAttribute(ce, CloudEvent.CAMEL_CLOUD_EVENT_SOURCE))).isEqualTo(sourceHeaderVal);
+            assertThat(request.getHeader(Exchange.CONTENT_TYPE)).isEqualTo("text/plain");
+        } finally {
+            server.stop();
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(CloudEvents.class)
     void testHeadersOverrideFromURI(CloudEvent ce) throws Exception {
         final KnativeHttpServer server = new KnativeHttpServer(context);
         final String typeHeaderKey = httpAttribute(ce, CloudEvent.CAMEL_CLOUD_EVENT_TYPE);
@@ -1527,6 +1574,51 @@ public class KnativeHttpTest {
         final String typeHeaderKey = httpAttribute(ce, CloudEvent.CAMEL_CLOUD_EVENT_TYPE);
         final String typeHeaderVal = UUID.randomUUID().toString();
         final String sourceHeaderKey = httpAttribute(ce, CloudEvent.CAMEL_CLOUD_EVENT_SOURCE);
+        final String sourceHeaderVal = UUID.randomUUID().toString();
+
+        KnativeComponent component = configureKnativeComponent(
+                context,
+                ce,
+                endpoint(
+                        Knative.EndpointKind.sink,
+                        "ep",
+                        String.format("http://%s:%d", server.getHost(), server.getPort()),
+                        Map.of(
+                                Knative.KNATIVE_CLOUD_EVENT_TYPE, "org.apache.camel.event",
+                                Knative.CONTENT_TYPE, "text/plain")));
+
+        component.getConfiguration().setCeOverride(Map.of(
+                Knative.KNATIVE_CE_OVERRIDE_PREFIX + typeHeaderKey, typeHeaderVal,
+                Knative.KNATIVE_CE_OVERRIDE_PREFIX + sourceHeaderKey, sourceHeaderVal));
+
+        RouteBuilder.addRoutes(context, b -> {
+            b.from("direct:start")
+                    .to("knative:endpoint/ep");
+        });
+
+        context.start();
+        try {
+            server.start();
+            template.sendBody("direct:start", "");
+
+            HttpServerRequest request = server.poll(30, TimeUnit.SECONDS);
+            assertThat(request.getHeader(httpAttribute(ce, CloudEvent.CAMEL_CLOUD_EVENT_VERSION))).isEqualTo(ce.version());
+            assertThat(request.getHeader(httpAttribute(ce, CloudEvent.CAMEL_CLOUD_EVENT_TYPE))).isEqualTo(typeHeaderVal);
+            assertThat(request.getHeader(httpAttribute(ce, CloudEvent.CAMEL_CLOUD_EVENT_ID))).isNotNull();
+            assertThat(request.getHeader(httpAttribute(ce, CloudEvent.CAMEL_CLOUD_EVENT_SOURCE))).isEqualTo(sourceHeaderVal);
+            assertThat(request.getHeader(Exchange.CONTENT_TYPE)).isEqualTo("text/plain");
+        } finally {
+            server.stop();
+        }
+    }
+
+    @ParameterizedTest
+    @EnumSource(CloudEvents.class)
+    void testHeadersOverrideFromYamlConf(CloudEvent ce) throws Exception {
+        final KnativeHttpServer server = new KnativeHttpServer(context);
+        final String typeHeaderKey = StringHelper.dashToCamelCase(httpAttribute(ce, CloudEvent.CAMEL_CLOUD_EVENT_TYPE));
+        final String typeHeaderVal = UUID.randomUUID().toString();
+        final String sourceHeaderKey = StringHelper.dashToCamelCase(httpAttribute(ce, CloudEvent.CAMEL_CLOUD_EVENT_SOURCE));
         final String sourceHeaderVal = UUID.randomUUID().toString();
 
         KnativeComponent component = configureKnativeComponent(

@@ -21,25 +21,19 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
-import io.apicurio.datamodels.models.Schema;
-import io.apicurio.datamodels.models.openapi.OpenApiMediaType;
-import io.apicurio.datamodels.models.openapi.OpenApiOperation;
-import io.apicurio.datamodels.models.openapi.OpenApiParameter;
-import io.apicurio.datamodels.models.openapi.OpenApiPathItem;
-import io.apicurio.datamodels.models.openapi.OpenApiResponse;
-import io.apicurio.datamodels.models.openapi.v20.OpenApi20Items;
-import io.apicurio.datamodels.models.openapi.v20.OpenApi20Operation;
-import io.apicurio.datamodels.models.openapi.v20.OpenApi20Parameter;
-import io.apicurio.datamodels.models.openapi.v30.OpenApi30MediaType;
-import io.apicurio.datamodels.models.openapi.v30.OpenApi30Operation;
-import io.apicurio.datamodels.models.openapi.v30.OpenApi30Parameter;
-import io.apicurio.datamodels.models.openapi.v30.OpenApi30RequestBody;
-import io.apicurio.datamodels.models.openapi.v30.OpenApi30Response;
-import io.apicurio.datamodels.models.openapi.v30.OpenApi30Schema;
-import io.apicurio.datamodels.refs.ReferenceUtil;
+import io.swagger.v3.oas.models.Operation;
+import io.swagger.v3.oas.models.PathItem;
+import io.swagger.v3.oas.models.media.MediaType;
+import io.swagger.v3.oas.models.media.Schema;
+import io.swagger.v3.oas.models.parameters.Parameter;
+import io.swagger.v3.oas.models.parameters.Parameter.StyleEnum;
+import io.swagger.v3.oas.models.parameters.RequestBody;
+import io.swagger.v3.oas.models.responses.ApiResponse;
+import io.swagger.v3.oas.models.responses.ApiResponses;
 import org.apache.camel.model.rest.CollectionFormat;
 import org.apache.camel.model.rest.RestParamType;
 import org.apache.camel.util.ObjectHelper;
@@ -48,19 +42,18 @@ import org.apache.camel.util.StringHelper;
 class OperationVisitor<T> {
 
     private final DestinationGenerator destinationGenerator;
-
     private final CodeEmitter<T> emitter;
-
     private final OperationFilter filter;
-
     private final String path;
+    private final String dtoPackageName;
 
     OperationVisitor(final CodeEmitter<T> emitter, final OperationFilter filter, final String path,
-                     final DestinationGenerator destinationGenerator) {
+                     final DestinationGenerator destinationGenerator, final String dtoPackageName) {
         this.emitter = emitter;
         this.filter = filter;
         this.path = path;
         this.destinationGenerator = destinationGenerator;
+        this.dtoPackageName = dtoPackageName;
     }
 
     List<String> asStringList(final List<?> values) {
@@ -78,86 +71,50 @@ class OperationVisitor<T> {
         return stringList;
     }
 
-    CodeEmitter<T> emit(final OpenApiParameter parameter) {
+    CodeEmitter<T> emit(final Parameter parameter) {
         emitter.emit("param");
 
-        OpenApiParameter toUse = parameter;
-        if (toUse instanceof OpenApi20Parameter) {
-            String ref = ((OpenApi20Parameter) toUse).get$ref();
-            if (ObjectHelper.isNotEmpty(ref)) {
-                toUse = (OpenApi20Parameter) ReferenceUtil.resolveRef(ref, parameter);
-            }
-        } else if (toUse instanceof OpenApi30Parameter) {
-            String ref = ((OpenApi30Parameter) toUse).get$ref();
-            if (ObjectHelper.isNotEmpty(ref)) {
-                toUse = (OpenApi30Parameter) ReferenceUtil.resolveRef(ref, parameter);
-            }
-        }
-
-        emit("name", toUse.getName());
-        final String parameterType = toUse.getIn();
+        emit("name", parameter.getName());
+        final String parameterType = parameter.getIn();
         if (ObjectHelper.isNotEmpty(parameterType)) {
             emit("type", RestParamType.valueOf(parameterType));
         }
         if (!"body".equals(parameterType)) {
-            if (toUse instanceof OpenApi20Parameter) {
-                final OpenApi20Parameter serializableParameter = (OpenApi20Parameter) toUse;
-
-                final String dataType = serializableParameter.getType();
-                emit("dataType", dataType);
-                emit("allowableValues", asStringList(serializableParameter.getEnum()));
-                final String collectionFormat = serializableParameter.getCollectionFormat();
-                if (ObjectHelper.isNotEmpty(collectionFormat)) {
-                    emit("collectionFormat", CollectionFormat.valueOf(collectionFormat));
+            final Schema schema = parameter.getSchema();
+            if (schema != null) {
+                final String dataType = schema.getType();
+                if (ObjectHelper.isNotEmpty(dataType)) {
+                    emit("dataType", dataType);
                 }
-                if (ObjectHelper.isNotEmpty(serializableParameter.getDefault())) {
-                    final String value
-                            = StringHelper.removeLeadingAndEndingQuotes(serializableParameter.getDefault().toString());
+                emit("allowableValues", asStringList(schema.getEnum()));
+                final StyleEnum style = parameter.getStyle();
+                if (ObjectHelper.isNotEmpty(style)) {
+                    if (style.equals(StyleEnum.FORM)) {
+                        // Guard against null explode value
+                        // See: https://github.com/OAI/OpenAPI-Specification/blob/master/versions/3.0.3.md#fixed-fields-10
+                        if (Boolean.FALSE.equals(parameter.getExplode())) {
+                            emit("collectionFormat", CollectionFormat.csv);
+                        } else {
+                            emit("collectionFormat", CollectionFormat.multi);
+                        }
+                    }
+                }
+                if (ObjectHelper.isNotEmpty(schema.getDefault())) {
+                    final String value = StringHelper.removeLeadingAndEndingQuotes(schema.getDefault().toString());
                     emit("defaultValue", value);
                 }
 
-                final OpenApi20Items items = serializableParameter.getItems();
-                if ("array".equals(dataType) && items != null) {
-                    emit("arrayType", items.getType());
-                }
-            } else if (toUse instanceof OpenApi30Parameter) {
-                final OpenApi30Parameter serializableParameter = (OpenApi30Parameter) toUse;
-                final OpenApi30Schema schema = (OpenApi30Schema) serializableParameter.getSchema();
-                if (schema != null) {
-                    final String dataType = schema.getType();
-                    if (ObjectHelper.isNotEmpty(dataType)) {
-                        emit("dataType", dataType);
-                    }
-                    emit("allowableValues", asStringList(schema.getEnum()));
-                    final String style = serializableParameter.getStyle();
-                    if (ObjectHelper.isNotEmpty(style)) {
-                        if (style.equals("form")) {
-                            // Guard against null explode value
-                            // See: https://github.com/OAI/OpenAPI-Specification/blob/master/versions/3.0.3.md#fixed-fields-10
-                            if (Boolean.FALSE.equals(serializableParameter.isExplode())) {
-                                emit("collectionFormat", CollectionFormat.csv);
-                            } else {
-                                emit("collectionFormat", CollectionFormat.multi);
-                            }
-                        }
-                    }
-                    if (ObjectHelper.isNotEmpty(schema.getDefault())) {
-                        final String value = StringHelper.removeLeadingAndEndingQuotes(schema.getDefault().toString());
-                        emit("defaultValue", value);
-                    }
-
-                    if ("array".equals(dataType) && schema.getItems() != null) {
-                        emit("arrayType", schema.getItems().getType());
-                    }
+                if ("array".equals(dataType) && schema.getItems() != null) {
+                    emit("arrayType", schema.getItems().getType());
                 }
             }
         }
-        if (toUse.isRequired() != null) {
-            emit("required", toUse.isRequired());
+        if (parameter.getRequired() != null) {
+            emit("required", parameter.getRequired());
         } else {
             emit("required", Boolean.FALSE);
         }
-        emit("description", toUse.getDescription());
+        emit("description", parameter.getDescription());
         emitter.emit("endParam");
 
         return emitter;
@@ -179,7 +136,7 @@ class OperationVisitor<T> {
         return emitter.emit(method, value);
     }
 
-    void visit(final PathVisitor.HttpMethod method, final OpenApiOperation operation) {
+    void visit(final PathItem.HttpMethod method, final Operation operation, final PathItem pathItem) {
         if (filter.accept(operation.getOperationId())) {
             final String methodName = method.name().toLowerCase();
             emitter.emit(methodName, path);
@@ -187,39 +144,20 @@ class OperationVisitor<T> {
             emit("id", operation.getOperationId());
             emit("description", operation.getDescription());
             Set<String> operationLevelConsumes = new LinkedHashSet<>();
-            if (operation instanceof OpenApi20Operation) {
-                OpenApi20Operation oas20Operation = (OpenApi20Operation) operation;
-                if (oas20Operation.getConsumes() != null) {
-                    operationLevelConsumes.addAll(oas20Operation.getConsumes());
-                }
-            } else if (operation instanceof OpenApi30Operation) {
-                OpenApi30Operation oas30Operation = (OpenApi30Operation) operation;
-                if (oas30Operation.getRequestBody() != null
-                        && oas30Operation.getRequestBody().getContent() != null) {
-                    operationLevelConsumes.addAll(oas30Operation.getRequestBody().getContent().keySet());
-                }
-
+            if (operation.getRequestBody() != null && operation.getRequestBody().getContent() != null) {
+                operationLevelConsumes.addAll(operation.getRequestBody().getContent().keySet());
             }
             emit("consumes", operationLevelConsumes);
             Set<String> operationLevelProduces = new LinkedHashSet<>();
-            if (operation instanceof OpenApi20Operation) {
-                OpenApi20Operation oas20Operation = (OpenApi20Operation) operation;
-                if (oas20Operation.getProduces() != null) {
-                    operationLevelProduces.addAll(oas20Operation.getProduces());
+            if (operation.getResponses() != null) {
+                for (ApiResponse response : operation.getResponses().values()) {
+                    if (response.getContent() != null) {
+                        operationLevelProduces.addAll(response.getContent().keySet());
+                    }
                 }
-            } else if (operation instanceof OpenApi30Operation) {
-                final OpenApi30Operation oas30Operation = (OpenApi30Operation) operation;
-                if (oas30Operation.getResponses() != null) {
-                    for (OpenApiResponse response : oas30Operation.getResponses().getItems()) {
-                        OpenApi30Response oas30Response = (OpenApi30Response) response;
-                        if (oas30Response.getContent() != null) {
-                            operationLevelProduces.addAll(oas30Response.getContent().keySet());
-                        }
-                    }
-                    OpenApi30Response oas30Response = (OpenApi30Response) oas30Operation.getResponses().getDefault();
-                    if (oas30Response != null && oas30Response.getContent() != null) {
-                        operationLevelProduces.addAll(oas30Response.getContent().keySet());
-                    }
+                ApiResponse response = operation.getResponses().get(ApiResponses.DEFAULT);
+                if (response != null && response.getContent() != null) {
+                    operationLevelProduces.addAll(response.getContent().keySet());
                 }
             }
             emit("produces", operationLevelProduces);
@@ -227,38 +165,46 @@ class OperationVisitor<T> {
             if (ObjectHelper.isNotEmpty(operation.getParameters())) {
                 operation.getParameters().forEach(this::emit);
             }
-            final OpenApiPathItem pathItem = (OpenApiPathItem) operation.parent();
             if (ObjectHelper.isNotEmpty(pathItem.getParameters())) {
                 pathItem.getParameters().forEach(this::emit);
             }
-
-            if (operation instanceof OpenApi30Operation) {
-                emitOas30Operation((OpenApi30Operation) operation);
-            }
+            emitOperation(operation);
 
             emitter.emit("to", destinationGenerator.generateDestinationFor(operation));
         }
-
     }
 
-    private CodeEmitter<T> emitOas30Operation(final OpenApi30Operation operation) {
+    private CodeEmitter<T> emitOperation(final Operation operation) {
         if (operation.getRequestBody() != null) {
+            String dto = null;
             boolean foundForm = false;
-            final OpenApi30RequestBody requestBody = operation.getRequestBody();
-            for (final Entry<String, OpenApiMediaType> entry : requestBody.getContent().entrySet()) {
+            final RequestBody requestBody = operation.getRequestBody();
+            for (final Entry<String, MediaType> entry : requestBody.getContent().entrySet()) {
                 final String ct = entry.getKey();
-                final OpenApi30MediaType mediaType = (OpenApi30MediaType) entry.getValue();
-                if (ct.contains("form") && mediaType.getSchema().getProperties() != null) {
-                    for (final Entry<String, Schema> entrySchema : mediaType.getSchema().getProperties().entrySet()) {
-                        OpenApi30Schema openApi30Schema = (OpenApi30Schema) entrySchema.getValue();
+                MediaType mt = entry.getValue();
+                if (ct.contains("form") && mt.getSchema().getProperties() != null) {
+                    final Set<Map.Entry<String, Schema>> entrySet = mt.getSchema().getProperties().entrySet();
+                    for (Map.Entry<String, Schema> entrySchema : entrySet) {
+                        Schema openApi31Schema = entrySchema.getValue();
                         foundForm = true;
                         emitter.emit("param");
                         emit("name", entrySchema.getKey());
                         emit("type", RestParamType.formData);
-                        emit("dataType", openApi30Schema.getType());
-                        emit("required", requestBody.isRequired());
+                        emit("dataType", openApi31Schema.getType());
+                        emit("required", requestBody.getRequired());
                         emit("description", entrySchema.getValue().getDescription());
                         emitter.emit("endParam");
+                    }
+                }
+                if (dto == null) {
+                    Schema schema = mt.getSchema();
+                    boolean isArray = "array".equals(schema.getType());
+                    String ref = isArray ? schema.getItems().get$ref() : schema.get$ref();
+                    if (ref != null && ref.startsWith("#/components/schemas/")) {
+                        dto = ref.substring(21);
+                        if (isArray) {
+                            dto += "[]";
+                        }
                     }
                 }
             }
@@ -270,9 +216,38 @@ class OperationVisitor<T> {
                 emit("description", requestBody.getDescription());
                 emitter.emit("endParam");
             }
+            if (dtoPackageName != null && dto != null) {
+                emit("type", dtoPackageName + "." + dto);
+            }
+        }
+
+        if (operation.getResponses() != null) {
+            String dto = null;
+            for (String key : operation.getResponses().keySet()) {
+                if ("200".equals(key)) {
+                    ApiResponse response = operation.getResponses().get(key);
+                    for (final Entry<String, MediaType> entry : response.getContent().entrySet()) {
+                        final MediaType mediaType = entry.getValue();
+                        if (dto == null) {
+                            Schema schema = mediaType.getSchema();
+                            boolean isArray = "array".equals(schema.getType());
+                            String ref = isArray ? schema.getItems().get$ref() : schema.get$ref();
+                            if (ref != null && ref.startsWith("#/components/schemas/")) {
+                                dto = ref.substring(21);
+                                if (isArray) {
+                                    dto += "[]";
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (dtoPackageName != null && dto != null) {
+                emit("outType", dtoPackageName + "." + dto);
+            }
         }
 
         return emitter;
-
     }
+
 }

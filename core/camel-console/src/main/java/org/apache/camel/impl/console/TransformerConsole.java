@@ -25,18 +25,18 @@ import org.apache.camel.support.console.AbstractDevConsole;
 import org.apache.camel.util.json.JsonArray;
 import org.apache.camel.util.json.JsonObject;
 
-@DevConsole("transformers")
+@DevConsole(name = "transformers", displayName = "Data Type Transformers", description = "Data-type transformer information")
 public class TransformerConsole extends AbstractDevConsole {
 
     public TransformerConsole() {
-        super("camel", "transformers", "Data Type Transformers", "Camel Data Type Transformer information");
+        super("camel", "transformers", "Data Type Transformers", "Data-type transformer information");
     }
 
     @Override
     protected String doCallText(Map<String, Object> options) {
         StringBuilder sb = new StringBuilder();
 
-        TransformerRegistry<?> reg = getCamelContext().getTransformerRegistry();
+        TransformerRegistry reg = getCamelContext().getTransformerRegistry();
         sb.append(String.format("\n    Size: %s", reg.size()));
         sb.append(String.format("\n    Dynamic Size: %s", reg.dynamicSize()));
         sb.append(String.format("\n    Static Size: %s", reg.staticSize()));
@@ -59,11 +59,19 @@ public class TransformerConsole extends AbstractDevConsole {
     protected JsonObject doCallJson(Map<String, Object> options) {
         JsonObject root = new JsonObject();
 
-        TransformerRegistry<?> reg = getCamelContext().getTransformerRegistry();
+        TransformerRegistry reg = getCamelContext().getTransformerRegistry();
         root.put("size", reg.size());
         root.put("dynamicSize", reg.dynamicSize());
         root.put("staticSize", reg.staticSize());
         root.put("maximumCacheSize", reg.getMaximumCacheSize());
+        final JsonArray arr = toJsonArray(reg);
+        if (!arr.isEmpty()) {
+            root.put("transformers", arr);
+        }
+        return root;
+    }
+
+    private static JsonArray toJsonArray(TransformerRegistry reg) {
         JsonArray arr = new JsonArray();
         for (Map.Entry<?, Transformer> entry : reg.entrySet()) {
             Transformer t = entry.getValue();
@@ -79,9 +87,6 @@ public class TransformerConsole extends AbstractDevConsole {
             }
             arr.add(jo);
         }
-        if (!arr.isEmpty()) {
-            root.put("transformers", arr);
-        }
-        return root;
+        return arr;
     }
 }

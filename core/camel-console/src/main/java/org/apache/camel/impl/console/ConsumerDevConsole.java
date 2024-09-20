@@ -34,7 +34,7 @@ import org.apache.camel.spi.annotations.DevConsole;
 import org.apache.camel.support.console.AbstractDevConsole;
 import org.apache.camel.util.json.JsonObject;
 
-@DevConsole("consumer")
+@DevConsole(name = "consumer", displayName = "Consumers", description = "Display information about Camel consumers")
 public class ConsumerDevConsole extends AbstractDevConsole {
 
     public ConsumerDevConsole() {
@@ -63,6 +63,8 @@ public class ConsumerDevConsole extends AbstractDevConsole {
                     sb.append(String.format("\n    Uri: %s", mc.getEndpointUri()));
                     sb.append(String.format("\n    State: %s", mc.getState()));
                     sb.append(String.format("\n    Class: %s", mc.getServiceType()));
+                    sb.append(String.format("\n    Remote: %b", mc.isRemoteEndpoint()));
+                    sb.append(String.format("\n    Hosted: %b", mc.isHostedService()));
                     sb.append(String.format("\n    Inflight: %d", inflight));
                     if (mcc instanceof ManagedSchedulePollConsumerMBean mpc) {
                         sb.append(String.format("\n    Polling: %s", mpc.isPolling()));
@@ -74,9 +76,9 @@ public class ConsumerDevConsole extends AbstractDevConsole {
                         sb.append(String.format("\n    Greedy: %s", mpc.isGreedy()));
                         sb.append(String.format("\n    Running Logging Level: %s", mpc.getRunningLoggingLevel()));
                         sb.append(String.format("\n    Send Empty Message When Idle: %s", mpc.isSendEmptyMessageWhenIdle()));
-                        sb.append(String.format("\n    Counter(total: %d success: %d error: %d)",
+                        sb.append(String.format("\n    Counter (total: %d success: %d error: %d)",
                                 mpc.getCounter(), mpc.getSuccessCounter(), mpc.getErrorCounter()));
-                        sb.append(String.format("\n    Delay(initial: %d delay: %d unit: %s)",
+                        sb.append(String.format("\n    Delay (initial: %d delay: %d unit: %s)",
                                 mpc.getInitialDelay(), mpc.getDelay(), mpc.getTimeUnit()));
                         sb.append(String.format(
                                 "\n    Backoff(counter: %d multiplier: %d errorThreshold: %d, idleThreshold: %d )",
@@ -113,7 +115,7 @@ public class ConsumerDevConsole extends AbstractDevConsole {
                                     sb.append(String.format("\n    Repeat Count: %s", repeatCount));
                                 }
                                 sb.append(String.format("\n    Running Logging Level: %s", runLoggingLevel));
-                                sb.append(String.format("\n    Counter(total: %s)", counter));
+                                sb.append(String.format("\n    Counter (total: %s)", counter));
 
                             }
                         } catch (Exception e) {
@@ -139,7 +141,7 @@ public class ConsumerDevConsole extends AbstractDevConsole {
                 String id = route.getId();
                 ManagedRouteMBean mr = mcc.getManagedRoute(id);
                 ManagedConsumerMBean mc = mcc.getManagedConsumer(id);
-                if (mc != null) {
+                if (mr != null && mc != null) {
                     JsonObject jo = new JsonObject();
                     Integer inflight = mc.getInflightExchanges();
                     if (inflight == null) {
@@ -150,6 +152,8 @@ public class ConsumerDevConsole extends AbstractDevConsole {
                     jo.put("uri", mc.getEndpointUri());
                     jo.put("state", mc.getState());
                     jo.put("class", mc.getServiceType());
+                    jo.put("remote", mc.isRemoteEndpoint());
+                    jo.put("hosted", mc.isHostedService());
                     jo.put("inflight", inflight);
                     jo.put("scheduled", false);
                     if (mcc instanceof ManagedSchedulePollConsumerMBean mpc) {
@@ -210,34 +214,8 @@ public class ConsumerDevConsole extends AbstractDevConsole {
                             // ignore
                         }
                     }
-
-                    if (mr != null) {
-                        JsonObject stats = new JsonObject();
-                        stats.put("idleSince", mr.getIdleSince());
-                        stats.put("exchangesTotal", mr.getExchangesTotal());
-                        stats.put("exchangesFailed", mr.getExchangesFailed());
-                        stats.put("exchangesInflight", mr.getExchangesInflight());
-                        stats.put("meanProcessingTime", mr.getMeanProcessingTime());
-                        stats.put("maxProcessingTime", mr.getMaxProcessingTime());
-                        stats.put("minProcessingTime", mr.getMinProcessingTime());
-                        if (mr.getExchangesTotal() > 0) {
-                            stats.put("lastProcessingTime", mr.getLastProcessingTime());
-                            stats.put("deltaProcessingTime", mr.getDeltaProcessingTime());
-                        }
-                        Date last = mr.getLastExchangeCreatedTimestamp();
-                        if (last != null) {
-                            stats.put("lastCreatedExchangeTimestamp", last.getTime());
-                        }
-                        last = mr.getLastExchangeCompletedTimestamp();
-                        if (last != null) {
-                            stats.put("lastCompletedExchangeTimestamp", last.getTime());
-                        }
-                        last = mr.getLastExchangeFailureTimestamp();
-                        if (last != null) {
-                            stats.put("lastFailedExchangeTimestamp", last.getTime());
-                        }
-                        jo.put("statistics", stats);
-                    }
+                    final JsonObject stats = toJsonObject(mr);
+                    jo.put("statistics", stats);
 
                     list.add(jo);
                 }
@@ -245,6 +223,34 @@ public class ConsumerDevConsole extends AbstractDevConsole {
         }
 
         return root;
+    }
+
+    private static JsonObject toJsonObject(ManagedRouteMBean mr) {
+        JsonObject stats = new JsonObject();
+        stats.put("idleSince", mr.getIdleSince());
+        stats.put("exchangesTotal", mr.getExchangesTotal());
+        stats.put("exchangesFailed", mr.getExchangesFailed());
+        stats.put("exchangesInflight", mr.getExchangesInflight());
+        stats.put("meanProcessingTime", mr.getMeanProcessingTime());
+        stats.put("maxProcessingTime", mr.getMaxProcessingTime());
+        stats.put("minProcessingTime", mr.getMinProcessingTime());
+        if (mr.getExchangesTotal() > 0) {
+            stats.put("lastProcessingTime", mr.getLastProcessingTime());
+            stats.put("deltaProcessingTime", mr.getDeltaProcessingTime());
+        }
+        Date last = mr.getLastExchangeCreatedTimestamp();
+        if (last != null) {
+            stats.put("lastCreatedExchangeTimestamp", last.getTime());
+        }
+        last = mr.getLastExchangeCompletedTimestamp();
+        if (last != null) {
+            stats.put("lastCompletedExchangeTimestamp", last.getTime());
+        }
+        last = mr.getLastExchangeFailureTimestamp();
+        if (last != null) {
+            stats.put("lastFailedExchangeTimestamp", last.getTime());
+        }
+        return stats;
     }
 
 }

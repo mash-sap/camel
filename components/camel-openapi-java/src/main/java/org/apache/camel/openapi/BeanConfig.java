@@ -32,7 +32,7 @@ public class BeanConfig {
 
     String[] schemes;
     String title;
-    Version version = new Version("3.0.1");
+    Version version = OPENAPI_VERSION_30;
     String licenseUrl;
     String license;
 
@@ -132,9 +132,19 @@ public class BeanConfig {
         if (info != null) {
             openApi.setInfo(info);
         }
-        for (String scheme : this.schemes) {
-            Server server = new Server().url(scheme + "://" + this.host + this.basePath);
-            openApi.addServersItem(server);
+        if (this.schemes != null) {
+            for (String scheme : this.schemes) {
+                String url = scheme + "://" + this.host;
+                if (this.basePath != null) {
+                    if (this.basePath.startsWith("/")) {
+                        url += this.basePath;
+                    } else {
+                        url = url + "/" + this.basePath;
+                    }
+                }
+                Server server = new Server().url(url);
+                openApi.addServersItem(server);
+            }
         }
         if (isOpenApi31()) {
             // This is a workaround to addType on ComposedSchema

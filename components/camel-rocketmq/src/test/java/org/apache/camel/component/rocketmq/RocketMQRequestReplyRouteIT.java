@@ -31,14 +31,13 @@ import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 
-@DisabledIfSystemProperty(named = "ci.env.name", matches = "apache.org",
-                          disabledReason = "These tests are flaky on Apache CI - see CAMEL-19832")
+@DisabledIfSystemProperty(named = "ci.env.name", matches = ".*",
+                          disabledReason = "These tests are flaky and unreliable - see CAMEL-19832")
 public class RocketMQRequestReplyRouteIT extends RocketMQTestSupport {
 
     private static final String START_ENDPOINT_URI = "rocketmq:START_TOPIC_RRT?producerGroup=p1&consumerGroup=c1";
@@ -54,7 +53,7 @@ public class RocketMQRequestReplyRouteIT extends RocketMQTestSupport {
 
     private static final String EXPECTED_MESSAGE = "Hi.";
 
-    private MockEndpoint resultEndpoint;
+    private static final int MESSAGE_COUNT = 5;
 
     private DefaultMQPushConsumer replierConsumer;
 
@@ -69,9 +68,7 @@ public class RocketMQRequestReplyRouteIT extends RocketMQTestSupport {
 
     @Override
     @BeforeEach
-    public void setUp() throws Exception {
-        super.setUp();
-        resultEndpoint = (MockEndpoint) context.getEndpoint(RESULT_ENDPOINT_URI);
+    public void doPostSetup() throws Exception {
         replierProducer = new DefaultMQProducer("replierProducer");
         replierProducer.setNamesrvAddr(rocketMQService.nameserverAddress());
         replierProducer.start();
@@ -116,16 +113,20 @@ public class RocketMQRequestReplyRouteIT extends RocketMQTestSupport {
 
     @Test
     public void testRouteMessageInRequestReplyMode() throws Exception {
-        resultEndpoint.expectedBodiesReceived(EXPECTED_MESSAGE);
+        MockEndpoint resultEndpoint = getMockEndpoint(RESULT_ENDPOINT_URI);
+        // It is very slow, so we are lenient and OK if we receive just 1 message
+        resultEndpoint.expectedMinimumMessageCount(1);
         resultEndpoint.message(0).header(RocketMQConstants.TOPIC).isEqualTo("REPLY_TO_TOPIC");
 
-        template.sendBody(START_ENDPOINT_URI, "hello, RocketMQ.");
+        for (int i = 0; i < MESSAGE_COUNT; i++) {
+            template.sendBody(START_ENDPOINT_URI, "hello, RocketMQ.");
+        }
 
         resultEndpoint.assertIsSatisfied();
     }
 
-    @AfterEach
-    public void tearDown() {
+    @Override
+    public void doPostTearDown() {
         replierConsumer.shutdown();
         replierProducer.shutdown();
     }

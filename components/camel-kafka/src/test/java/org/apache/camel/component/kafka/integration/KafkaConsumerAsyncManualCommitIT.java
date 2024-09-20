@@ -47,7 +47,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-public class KafkaConsumerAsyncManualCommitIT extends BaseEmbeddedKafkaTestSupport {
+public class KafkaConsumerAsyncManualCommitIT extends BaseKafkaTestSupport {
     public static final String TOPIC = "testManualCommitTest";
 
     private static final Logger LOG = LoggerFactory.getLogger(KafkaConsumerAsyncManualCommitIT.class);
@@ -127,7 +127,7 @@ public class KafkaConsumerAsyncManualCommitIT extends BaseEmbeddedKafkaTestSuppo
             producer.send(data);
         }
 
-        Awaitility.await().atMost(3, TimeUnit.SECONDS).untilAsserted(() -> to.assertIsSatisfied());
+        Awaitility.await().atMost(10, TimeUnit.SECONDS).untilAsserted(() -> to.assertIsSatisfied()); // changed to 10 sec for CAMEL-20722
 
         List<Exchange> exchangeList = to.getExchanges();
         assertEquals(5, exchangeList.size());

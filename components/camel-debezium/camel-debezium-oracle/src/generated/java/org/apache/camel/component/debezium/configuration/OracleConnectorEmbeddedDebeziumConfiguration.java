@@ -18,16 +18,18 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
     private boolean logMiningBufferDropOnStop = false;
     @UriParam(label = LABEL_NAME)
     private String messageKeyColumns;
+    @UriParam(label = LABEL_NAME, defaultValue = "io.debezium.pipeline.txmetadata.DefaultTransactionMetadataFactory")
+    private String transactionMetadataFactory = "io.debezium.pipeline.txmetadata.DefaultTransactionMetadataFactory";
     @UriParam(label = LABEL_NAME)
     private String customMetricTags;
-    @UriParam(label = LABEL_NAME)
-    private String logMiningArchiveDestinationName;
     @UriParam(label = LABEL_NAME)
     private String openlogreplicatorHost;
     @UriParam(label = LABEL_NAME, defaultValue = "source")
     private String signalEnabledChannels = "source";
     @UriParam(label = LABEL_NAME, defaultValue = "true")
     private boolean includeSchemaChanges = true;
+    @UriParam(label = LABEL_NAME, defaultValue = "false")
+    private boolean logMiningIncludeRedoSql = false;
     @UriParam(label = LABEL_NAME)
     private String signalDataCollection;
     @UriParam(label = LABEL_NAME)
@@ -60,12 +62,16 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
     private String topicNamingStrategy = "io.debezium.schema.SchemaTopicNamingStrategy";
     @UriParam(label = LABEL_NAME, defaultValue = "initial")
     private String snapshotMode = "initial";
+    @UriParam(label = LABEL_NAME, defaultValue = "false")
+    private boolean snapshotModeConfigurationBasedSnapshotData = false;
     @UriParam(label = LABEL_NAME, defaultValue = "10s", javaType = "java.time.Duration")
     private long retriableRestartConnectorWaitMs = 10000;
     @UriParam(label = LABEL_NAME, defaultValue = "0ms", javaType = "java.time.Duration")
     private long snapshotDelayMs = 0;
     @UriParam(label = LABEL_NAME, defaultValue = "redo_log_catalog")
     private String logMiningStrategy = "redo_log_catalog";
+    @UriParam(label = LABEL_NAME, defaultValue = "false")
+    private boolean snapshotModeConfigurationBasedSnapshotOnDataError = false;
     @UriParam(label = LABEL_NAME)
     private String schemaHistoryInternalFileFilename;
     @UriParam(label = LABEL_NAME, defaultValue = "false")
@@ -76,8 +82,12 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
     private String binaryHandlingMode = "bytes";
     @UriParam(label = LABEL_NAME)
     private String databaseOutServerName;
+    @UriParam(label = LABEL_NAME, defaultValue = "0")
+    private long archiveLogHours = 0;
     @UriParam(label = LABEL_NAME)
     private String snapshotIncludeCollectionList;
+    @UriParam(label = LABEL_NAME, defaultValue = "false")
+    private boolean snapshotModeConfigurationBasedStartStream = false;
     @UriParam(label = LABEL_NAME)
     private String databasePdbName;
     @UriParam(label = LABEL_NAME, defaultValue = "LogMiner")
@@ -98,6 +108,8 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
     private int snapshotMaxThreads = 1;
     @UriParam(label = LABEL_NAME)
     private String notificationSinkTopicName;
+    @UriParam(label = LABEL_NAME)
+    private String snapshotModeCustomName;
     @UriParam(label = LABEL_NAME, defaultValue = "none")
     private String logMiningQueryFilterMode = "none";
     @UriParam(label = LABEL_NAME, defaultValue = "none")
@@ -106,6 +118,10 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
     private long logMiningBatchSizeDefault = 20000;
     @UriParam(label = LABEL_NAME)
     private String tableIncludeList;
+    @UriParam(label = LABEL_NAME, defaultValue = "0ms", javaType = "java.time.Duration")
+    private long streamingDelayMs = 0;
+    @UriParam(label = LABEL_NAME, defaultValue = "10m", javaType = "java.time.Duration")
+    private int databaseQueryTimeoutMs = 600000;
     @UriParam(label = LABEL_NAME, defaultValue = "10000")
     private int queryFetchSize = 10000;
     @UriParam(label = LABEL_NAME, defaultValue = "0ms", javaType = "java.time.Duration")
@@ -139,6 +155,8 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
     @UriParam(label = LABEL_NAME, defaultValue = "0ms", javaType = "java.time.Duration")
     private int heartbeatIntervalMs = 0;
     @UriParam(label = LABEL_NAME, defaultValue = "false")
+    private boolean snapshotModeConfigurationBasedSnapshotOnSchemaError = false;
+    @UriParam(label = LABEL_NAME, defaultValue = "false")
     private boolean schemaHistoryInternalSkipUnparseableDdl = false;
     @UriParam(label = LABEL_NAME)
     private String columnIncludeList;
@@ -157,6 +175,8 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
     private String logMiningBufferInfinispanCacheEvents;
     @UriParam(label = LABEL_NAME, defaultValue = "t")
     private String skippedOperations = "t";
+    @UriParam(label = LABEL_NAME)
+    private String archiveDestinationName;
     @UriParam(label = LABEL_NAME, defaultValue = "20s", javaType = "java.time.Duration")
     private long logMiningScnGapDetectionTimeIntervalMaxMs = 20000;
     @UriParam(label = LABEL_NAME, defaultValue = "8192")
@@ -175,6 +195,8 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
     private boolean schemaHistoryInternalStoreOnlyCapturedTablesDdl = false;
     @UriParam(label = LABEL_NAME, defaultValue = "false")
     private boolean schemaHistoryInternalStoreOnlyCapturedDatabasesDdl = false;
+    @UriParam(label = LABEL_NAME, defaultValue = "0")
+    private int snapshotDatabaseErrorsMaxRetries = 0;
     @UriParam(label = LABEL_NAME)
     @Metadata(required = true)
     private String topicPrefix;
@@ -182,8 +204,6 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
     private boolean includeSchemaComments = false;
     @UriParam(label = LABEL_NAME, defaultValue = "io.debezium.connector.oracle.OracleSourceInfoStructMaker")
     private String sourceinfoStructMaker = "io.debezium.connector.oracle.OracleSourceInfoStructMaker";
-    @UriParam(label = LABEL_NAME, defaultValue = "0")
-    private long logMiningArchiveLogHours = 0;
     @UriParam(label = LABEL_NAME)
     private int openlogreplicatorPort;
     @UriParam(label = LABEL_NAME, defaultValue = "100000")
@@ -192,6 +212,8 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
     private long maxQueueSizeInBytes = 0;
     @UriParam(label = LABEL_NAME)
     private String databaseUrl;
+    @UriParam(label = LABEL_NAME, defaultValue = "false")
+    private boolean snapshotModeConfigurationBasedSnapshotSchema = false;
     @UriParam(label = LABEL_NAME, defaultValue = "adaptive")
     private String timePrecisionMode = "adaptive";
     @UriParam(label = LABEL_NAME)
@@ -210,8 +232,6 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
     private String databaseHostname;
     @UriParam(label = LABEL_NAME, defaultValue = "1000")
     private long logMiningBatchSizeMin = 1000;
-    @UriParam(label = LABEL_NAME)
-    private String snapshotEnhancePredicateScn;
 
     /**
      * Controls how the connector holds locks on tables while performing the
@@ -266,6 +286,17 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
     }
 
     /**
+     * Class to make transaction context & transaction struct/schemas
+     */
+    public void setTransactionMetadataFactory(String transactionMetadataFactory) {
+        this.transactionMetadataFactory = transactionMetadataFactory;
+    }
+
+    public String getTransactionMetadataFactory() {
+        return transactionMetadataFactory;
+    }
+
+    /**
      * The custom metric tags will accept key-value pairs to customize the MBean
      * object name which should be appended the end of regular name, each key
      * would represent a tag for the MBean object name, and the corresponding
@@ -277,20 +308,6 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
 
     public String getCustomMetricTags() {
         return customMetricTags;
-    }
-
-    /**
-     * Sets the specific archive log destination as the source for reading
-     * archive logs.When not set, the connector will automatically select the
-     * first LOCAL and VALID destination.
-     */
-    public void setLogMiningArchiveDestinationName(
-            String logMiningArchiveDestinationName) {
-        this.logMiningArchiveDestinationName = logMiningArchiveDestinationName;
-    }
-
-    public String getLogMiningArchiveDestinationName() {
-        return logMiningArchiveDestinationName;
     }
 
     /**
@@ -330,6 +347,18 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
 
     public boolean isIncludeSchemaChanges() {
         return includeSchemaChanges;
+    }
+
+    /**
+     * When enabled, the transaction log REDO SQL will be included in the source
+     * information block.
+     */
+    public void setLogMiningIncludeRedoSql(boolean logMiningIncludeRedoSql) {
+        this.logMiningIncludeRedoSql = logMiningIncludeRedoSql;
+    }
+
+    public boolean isLogMiningIncludeRedoSql() {
+        return logMiningIncludeRedoSql;
     }
 
     /**
@@ -566,6 +595,19 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
     }
 
     /**
+     * When 'snapshot.mode' is set as configuration_based, this setting permits
+     * to specify whenever the data should be snapshotted or not.
+     */
+    public void setSnapshotModeConfigurationBasedSnapshotData(
+            boolean snapshotModeConfigurationBasedSnapshotData) {
+        this.snapshotModeConfigurationBasedSnapshotData = snapshotModeConfigurationBasedSnapshotData;
+    }
+
+    public boolean isSnapshotModeConfigurationBasedSnapshotData() {
+        return snapshotModeConfigurationBasedSnapshotData;
+    }
+
+    /**
      * Time to wait before restarting connector after retriable exception
      * occurs. Defaults to 10000ms.
      */
@@ -600,6 +642,20 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
 
     public String getLogMiningStrategy() {
         return logMiningStrategy;
+    }
+
+    /**
+     * When 'snapshot.mode' is set as configuration_based, this setting permits
+     * to specify whenever the data should be snapshotted or not in case of
+     * error.
+     */
+    public void setSnapshotModeConfigurationBasedSnapshotOnDataError(
+            boolean snapshotModeConfigurationBasedSnapshotOnDataError) {
+        this.snapshotModeConfigurationBasedSnapshotOnDataError = snapshotModeConfigurationBasedSnapshotOnDataError;
+    }
+
+    public boolean isSnapshotModeConfigurationBasedSnapshotOnDataError() {
+        return snapshotModeConfigurationBasedSnapshotOnDataError;
     }
 
     /**
@@ -674,6 +730,18 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
     }
 
     /**
+     * The number of hours in the past from SYSDATE to mine archive logs. Using
+     * 0 mines all available archive logs
+     */
+    public void setArchiveLogHours(long archiveLogHours) {
+        this.archiveLogHours = archiveLogHours;
+    }
+
+    public long getArchiveLogHours() {
+        return archiveLogHours;
+    }
+
+    /**
      * This setting must be set to specify a list of tables/collections whose
      * snapshot must be taken on creating or restarting the connector.
      */
@@ -684,6 +752,19 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
 
     public String getSnapshotIncludeCollectionList() {
         return snapshotIncludeCollectionList;
+    }
+
+    /**
+     * When 'snapshot.mode' is set as configuration_based, this setting permits
+     * to specify whenever the stream should start or not after snapshot.
+     */
+    public void setSnapshotModeConfigurationBasedStartStream(
+            boolean snapshotModeConfigurationBasedStartStream) {
+        this.snapshotModeConfigurationBasedStartStream = snapshotModeConfigurationBasedStartStream;
+    }
+
+    public boolean isSnapshotModeConfigurationBasedStartStream() {
+        return snapshotModeConfigurationBasedStartStream;
     }
 
     /**
@@ -821,6 +902,20 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
     }
 
     /**
+     * When 'snapshot.mode' is set as custom, this setting must be set to
+     * specify a the name of the custom implementation provided in the 'name()'
+     * method. The implementations must implement the 'Snapshotter' interface
+     * and is called on each app boot to determine whether to do a snapshot.
+     */
+    public void setSnapshotModeCustomName(String snapshotModeCustomName) {
+        this.snapshotModeCustomName = snapshotModeCustomName;
+    }
+
+    public String getSnapshotModeCustomName() {
+        return snapshotModeCustomName;
+    }
+
+    /**
      * Specifies how the filter configuration is applied to the LogMiner
      * database query.
      * none - The query does not apply any schema or table filters, all
@@ -876,6 +971,30 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
 
     public String getTableIncludeList() {
         return tableIncludeList;
+    }
+
+    /**
+     * A delay period after the snapshot is completed and the streaming begins,
+     * given in milliseconds. Defaults to 0 ms.
+     */
+    public void setStreamingDelayMs(long streamingDelayMs) {
+        this.streamingDelayMs = streamingDelayMs;
+    }
+
+    public long getStreamingDelayMs() {
+        return streamingDelayMs;
+    }
+
+    /**
+     * Time to wait for a query to execute, given in milliseconds. Defaults to
+     * 600 seconds (600,000 ms); zero means there is no limit.
+     */
+    public void setDatabaseQueryTimeoutMs(int databaseQueryTimeoutMs) {
+        this.databaseQueryTimeoutMs = databaseQueryTimeoutMs;
+    }
+
+    public int getDatabaseQueryTimeoutMs() {
+        return databaseQueryTimeoutMs;
     }
 
     /**
@@ -1088,6 +1207,20 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
     }
 
     /**
+     * When 'snapshot.mode' is set as configuration_based, this setting permits
+     * to specify whenever the schema should be snapshotted or not in case of
+     * error.
+     */
+    public void setSnapshotModeConfigurationBasedSnapshotOnSchemaError(
+            boolean snapshotModeConfigurationBasedSnapshotOnSchemaError) {
+        this.snapshotModeConfigurationBasedSnapshotOnSchemaError = snapshotModeConfigurationBasedSnapshotOnSchemaError;
+    }
+
+    public boolean isSnapshotModeConfigurationBasedSnapshotOnSchemaError() {
+        return snapshotModeConfigurationBasedSnapshotOnSchemaError;
+    }
+
+    /**
      * Controls the action Debezium will take when it meets a DDL statement in
      * binlog, that it cannot parse.By default the connector will stop operating
      * but by changing the setting it can ignore the statements which it cannot
@@ -1199,6 +1332,19 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
 
     public String getSkippedOperations() {
         return skippedOperations;
+    }
+
+    /**
+     * Sets the specific archive log destination as the source for reading
+     * archive logs.When not set, the connector will automatically select the
+     * first LOCAL and VALID destination.
+     */
+    public void setArchiveDestinationName(String archiveDestinationName) {
+        this.archiveDestinationName = archiveDestinationName;
+    }
+
+    public String getArchiveDestinationName() {
+        return archiveDestinationName;
     }
 
     /**
@@ -1323,6 +1469,19 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
     }
 
     /**
+     * The number of attempts to retry database errors during snapshots before
+     * failing.
+     */
+    public void setSnapshotDatabaseErrorsMaxRetries(
+            int snapshotDatabaseErrorsMaxRetries) {
+        this.snapshotDatabaseErrorsMaxRetries = snapshotDatabaseErrorsMaxRetries;
+    }
+
+    public int getSnapshotDatabaseErrorsMaxRetries() {
+        return snapshotDatabaseErrorsMaxRetries;
+    }
+
+    /**
      * Topic prefix that identifies and provides a namespace for the particular
      * database server/cluster is capturing changes. The topic prefix should be
      * unique across all other connectors, since it is used as a prefix for all
@@ -1363,18 +1522,6 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
 
     public String getSourceinfoStructMaker() {
         return sourceinfoStructMaker;
-    }
-
-    /**
-     * The number of hours in the past from SYSDATE to mine archive logs. Using
-     * 0 mines all available archive logs
-     */
-    public void setLogMiningArchiveLogHours(long logMiningArchiveLogHours) {
-        this.logMiningArchiveLogHours = logMiningArchiveLogHours;
-    }
-
-    public long getLogMiningArchiveLogHours() {
-        return logMiningArchiveLogHours;
     }
 
     /**
@@ -1423,6 +1570,19 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
 
     public String getDatabaseUrl() {
         return databaseUrl;
+    }
+
+    /**
+     * When 'snapshot.mode' is set as configuration_based, this setting permits
+     * to specify whenever the schema should be snapshotted or not.
+     */
+    public void setSnapshotModeConfigurationBasedSnapshotSchema(
+            boolean snapshotModeConfigurationBasedSnapshotSchema) {
+        this.snapshotModeConfigurationBasedSnapshotSchema = snapshotModeConfigurationBasedSnapshotSchema;
+    }
+
+    public boolean isSnapshotModeConfigurationBasedSnapshotSchema() {
+        return snapshotModeConfigurationBasedSnapshotSchema;
     }
 
     /**
@@ -1542,18 +1702,6 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
         return logMiningBatchSizeMin;
     }
 
-    /**
-     * A token to replace on snapshot predicate template
-     */
-    public void setSnapshotEnhancePredicateScn(
-            String snapshotEnhancePredicateScn) {
-        this.snapshotEnhancePredicateScn = snapshotEnhancePredicateScn;
-    }
-
-    public String getSnapshotEnhancePredicateScn() {
-        return snapshotEnhancePredicateScn;
-    }
-
     @Override
     protected Configuration createConnectorConfiguration() {
         final Configuration.Builder configBuilder = Configuration.create();
@@ -1561,11 +1709,12 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
         addPropertyIfNotNull(configBuilder, "snapshot.locking.mode", snapshotLockingMode);
         addPropertyIfNotNull(configBuilder, "log.mining.buffer.drop.on.stop", logMiningBufferDropOnStop);
         addPropertyIfNotNull(configBuilder, "message.key.columns", messageKeyColumns);
+        addPropertyIfNotNull(configBuilder, "transaction.metadata.factory", transactionMetadataFactory);
         addPropertyIfNotNull(configBuilder, "custom.metric.tags", customMetricTags);
-        addPropertyIfNotNull(configBuilder, "log.mining.archive.destination.name", logMiningArchiveDestinationName);
         addPropertyIfNotNull(configBuilder, "openlogreplicator.host", openlogreplicatorHost);
         addPropertyIfNotNull(configBuilder, "signal.enabled.channels", signalEnabledChannels);
         addPropertyIfNotNull(configBuilder, "include.schema.changes", includeSchemaChanges);
+        addPropertyIfNotNull(configBuilder, "log.mining.include.redo.sql", logMiningIncludeRedoSql);
         addPropertyIfNotNull(configBuilder, "signal.data.collection", signalDataCollection);
         addPropertyIfNotNull(configBuilder, "converters", converters);
         addPropertyIfNotNull(configBuilder, "snapshot.fetch.size", snapshotFetchSize);
@@ -1582,15 +1731,19 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
         addPropertyIfNotNull(configBuilder, "log.mining.buffer.infinispan.cache.transactions", logMiningBufferInfinispanCacheTransactions);
         addPropertyIfNotNull(configBuilder, "topic.naming.strategy", topicNamingStrategy);
         addPropertyIfNotNull(configBuilder, "snapshot.mode", snapshotMode);
+        addPropertyIfNotNull(configBuilder, "snapshot.mode.configuration.based.snapshot.data", snapshotModeConfigurationBasedSnapshotData);
         addPropertyIfNotNull(configBuilder, "retriable.restart.connector.wait.ms", retriableRestartConnectorWaitMs);
         addPropertyIfNotNull(configBuilder, "snapshot.delay.ms", snapshotDelayMs);
         addPropertyIfNotNull(configBuilder, "log.mining.strategy", logMiningStrategy);
+        addPropertyIfNotNull(configBuilder, "snapshot.mode.configuration.based.snapshot.on.data.error", snapshotModeConfigurationBasedSnapshotOnDataError);
         addPropertyIfNotNull(configBuilder, "schema.history.internal.file.filename", schemaHistoryInternalFileFilename);
         addPropertyIfNotNull(configBuilder, "tombstones.on.delete", tombstonesOnDelete);
         addPropertyIfNotNull(configBuilder, "decimal.handling.mode", decimalHandlingMode);
         addPropertyIfNotNull(configBuilder, "binary.handling.mode", binaryHandlingMode);
         addPropertyIfNotNull(configBuilder, "database.out.server.name", databaseOutServerName);
+        addPropertyIfNotNull(configBuilder, "archive.log.hours", archiveLogHours);
         addPropertyIfNotNull(configBuilder, "snapshot.include.collection.list", snapshotIncludeCollectionList);
+        addPropertyIfNotNull(configBuilder, "snapshot.mode.configuration.based.start.stream", snapshotModeConfigurationBasedStartStream);
         addPropertyIfNotNull(configBuilder, "database.pdb.name", databasePdbName);
         addPropertyIfNotNull(configBuilder, "database.connection.adapter", databaseConnectionAdapter);
         addPropertyIfNotNull(configBuilder, "log.mining.flush.table.name", logMiningFlushTableName);
@@ -1601,10 +1754,13 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
         addPropertyIfNotNull(configBuilder, "event.processing.failure.handling.mode", eventProcessingFailureHandlingMode);
         addPropertyIfNotNull(configBuilder, "snapshot.max.threads", snapshotMaxThreads);
         addPropertyIfNotNull(configBuilder, "notification.sink.topic.name", notificationSinkTopicName);
+        addPropertyIfNotNull(configBuilder, "snapshot.mode.custom.name", snapshotModeCustomName);
         addPropertyIfNotNull(configBuilder, "log.mining.query.filter.mode", logMiningQueryFilterMode);
         addPropertyIfNotNull(configBuilder, "schema.name.adjustment.mode", schemaNameAdjustmentMode);
         addPropertyIfNotNull(configBuilder, "log.mining.batch.size.default", logMiningBatchSizeDefault);
         addPropertyIfNotNull(configBuilder, "table.include.list", tableIncludeList);
+        addPropertyIfNotNull(configBuilder, "streaming.delay.ms", streamingDelayMs);
+        addPropertyIfNotNull(configBuilder, "database.query.timeout.ms", databaseQueryTimeoutMs);
         addPropertyIfNotNull(configBuilder, "query.fetch.size", queryFetchSize);
         addPropertyIfNotNull(configBuilder, "log.mining.sleep.time.min.ms", logMiningSleepTimeMinMs);
         addPropertyIfNotNull(configBuilder, "unavailable.value.placeholder", unavailableValuePlaceholder);
@@ -1621,6 +1777,7 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
         addPropertyIfNotNull(configBuilder, "datatype.propagate.source.type", datatypePropagateSourceType);
         addPropertyIfNotNull(configBuilder, "incremental.snapshot.watermarking.strategy", incrementalSnapshotWatermarkingStrategy);
         addPropertyIfNotNull(configBuilder, "heartbeat.interval.ms", heartbeatIntervalMs);
+        addPropertyIfNotNull(configBuilder, "snapshot.mode.configuration.based.snapshot.on.schema.error", snapshotModeConfigurationBasedSnapshotOnSchemaError);
         addPropertyIfNotNull(configBuilder, "schema.history.internal.skip.unparseable.ddl", schemaHistoryInternalSkipUnparseableDdl);
         addPropertyIfNotNull(configBuilder, "column.include.list", columnIncludeList);
         addPropertyIfNotNull(configBuilder, "log.mining.username.exclude.list", logMiningUsernameExcludeList);
@@ -1630,6 +1787,7 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
         addPropertyIfNotNull(configBuilder, "database.password", databasePassword);
         addPropertyIfNotNull(configBuilder, "log.mining.buffer.infinispan.cache.events", logMiningBufferInfinispanCacheEvents);
         addPropertyIfNotNull(configBuilder, "skipped.operations", skippedOperations);
+        addPropertyIfNotNull(configBuilder, "archive.destination.name", archiveDestinationName);
         addPropertyIfNotNull(configBuilder, "log.mining.scn.gap.detection.time.interval.max.ms", logMiningScnGapDetectionTimeIntervalMaxMs);
         addPropertyIfNotNull(configBuilder, "max.queue.size", maxQueueSize);
         addPropertyIfNotNull(configBuilder, "rac.nodes", racNodes);
@@ -1639,14 +1797,15 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
         addPropertyIfNotNull(configBuilder, "provide.transaction.metadata", provideTransactionMetadata);
         addPropertyIfNotNull(configBuilder, "schema.history.internal.store.only.captured.tables.ddl", schemaHistoryInternalStoreOnlyCapturedTablesDdl);
         addPropertyIfNotNull(configBuilder, "schema.history.internal.store.only.captured.databases.ddl", schemaHistoryInternalStoreOnlyCapturedDatabasesDdl);
+        addPropertyIfNotNull(configBuilder, "snapshot.database.errors.max.retries", snapshotDatabaseErrorsMaxRetries);
         addPropertyIfNotNull(configBuilder, "topic.prefix", topicPrefix);
         addPropertyIfNotNull(configBuilder, "include.schema.comments", includeSchemaComments);
         addPropertyIfNotNull(configBuilder, "sourceinfo.struct.maker", sourceinfoStructMaker);
-        addPropertyIfNotNull(configBuilder, "log.mining.archive.log.hours", logMiningArchiveLogHours);
         addPropertyIfNotNull(configBuilder, "openlogreplicator.port", openlogreplicatorPort);
         addPropertyIfNotNull(configBuilder, "log.mining.batch.size.max", logMiningBatchSizeMax);
         addPropertyIfNotNull(configBuilder, "max.queue.size.in.bytes", maxQueueSizeInBytes);
         addPropertyIfNotNull(configBuilder, "database.url", databaseUrl);
+        addPropertyIfNotNull(configBuilder, "snapshot.mode.configuration.based.snapshot.schema", snapshotModeConfigurationBasedSnapshotSchema);
         addPropertyIfNotNull(configBuilder, "time.precision.mode", timePrecisionMode);
         addPropertyIfNotNull(configBuilder, "post.processors", postProcessors);
         addPropertyIfNotNull(configBuilder, "database.port", databasePort);
@@ -1656,7 +1815,6 @@ public class OracleConnectorEmbeddedDebeziumConfiguration
         addPropertyIfNotNull(configBuilder, "log.mining.session.max.ms", logMiningSessionMaxMs);
         addPropertyIfNotNull(configBuilder, "database.hostname", databaseHostname);
         addPropertyIfNotNull(configBuilder, "log.mining.batch.size.min", logMiningBatchSizeMin);
-        addPropertyIfNotNull(configBuilder, "snapshot.enhance.predicate.scn", snapshotEnhancePredicateScn);
         
         return configBuilder.build();
     }

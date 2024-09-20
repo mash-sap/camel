@@ -16,8 +16,8 @@
  */
 package org.apache.camel;
 
+import java.time.Duration;
 import java.util.Collection;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -162,26 +162,11 @@ public interface CamelContext extends CamelContextLifecycle, RuntimeConfiguratio
     String getVersion();
 
     /**
-     * Gets the uptime in a human readable format
+     * Gets the uptime for this context.
      *
-     * @return the uptime in days/hours/minutes
+     * @return the uptime
      */
-    @Deprecated
-    String getUptime();
-
-    /**
-     * Gets the uptime in milli seconds
-     *
-     * @return the uptime in millis seconds
-     */
-    @Deprecated
-    long getUptimeMillis();
-
-    /**
-     * Gets the date and time Camel was started up.
-     */
-    @Deprecated
-    Date getStartDate();
+    Duration getUptime();
 
     /**
      * Gets a clock instance that keeps track of time for relevant CamelContext events
@@ -410,7 +395,7 @@ public interface CamelContext extends CamelContextLifecycle, RuntimeConfiguratio
     /**
      * Gets the {@link org.apache.camel.spi.EndpointRegistry}
      */
-    EndpointRegistry<? extends ValueHolder<String>> getEndpointRegistry();
+    EndpointRegistry getEndpointRegistry();
 
     /**
      * Resolves the given name to an {@link Endpoint} of the specified type. If the name has a singleton endpoint
@@ -836,8 +821,8 @@ public interface CamelContext extends CamelContextLifecycle, RuntimeConfiguratio
     /**
      * Sets a variable
      *
-     * @param name  the variable name. Can be prefixed with repo-id:name to lookup the variable from a specific
-     *              repository. If no repo-id is provided, then global repository will be used.
+     * @param name  the variable name. Can be prefixed with repo-id:name to store the variable in a specific repository.
+     *              If no repo-id is provided, then global repository will be used.
      * @param value the value of the variable
      */
     void setVariable(String name, Object value);
@@ -1295,7 +1280,7 @@ public interface CamelContext extends CamelContextLifecycle, RuntimeConfiguratio
     /**
      * Whether to capture precise source location:line-number for all EIPs in Camel routes.
      *
-     * Enabling this will impact parsing Java based routes (also Groovy, Kotlin, etc.) on startup as this uses
+     * Enabling this will impact parsing Java based routes (also Groovy, etc.) on startup as this uses
      * {@link StackTraceElement} to calculate the location from the Camel route, which comes with a performance cost.
      * This only impact startup, not the performance of the routes at runtime.
      */
@@ -1304,7 +1289,7 @@ public interface CamelContext extends CamelContextLifecycle, RuntimeConfiguratio
     /**
      * Whether to capture precise source location:line-number for all EIPs in Camel routes.
      *
-     * Enabling this will impact parsing Java based routes (also Groovy, Kotlin, etc.) on startup as this uses
+     * Enabling this will impact parsing Java based routes (also Groovy, etc.) on startup as this uses
      * {@link StackTraceElement} to calculate the location from the Camel route, which comes with a performance cost.
      * This only impact startup, not the performance of the routes at runtime.
      */

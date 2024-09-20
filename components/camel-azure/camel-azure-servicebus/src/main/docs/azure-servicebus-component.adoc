@@ -48,18 +48,15 @@ include::partial$component-endpoint-options.adoc[]
 
 // endpoint options: END
 
-
-== Async Consumer and Producer
-
-This component implements the async Consumer and producer.
-
-This allows camel route to consume and produce events asynchronously without blocking any threads.
-
-== Usage
-
 // component headers: START
 include::partial$component-endpoint-headers.adoc[]
 // component headers: END
+
+== Usage
+
+=== Consumer and Producer
+
+This component implements the Consumer and Producer.
 
 === Authentication Information
 
@@ -82,7 +79,7 @@ See the documentation https://docs.microsoft.com/en-us/azure/active-directory/au
 
 *Client instance*:
 
-- You can provide a `com.azure.messaging.servicebus.ServiceBusSenderAsyncClient` for sending message and/or `com.azure.messaging.servicebus.ServiceBusReceiverAsyncClient` to receive messages. If you provide the instances, they will be autowired.
+- You can provide a `com.azure.messaging.servicebus.ServiceBusSenderClient` for sending message and/or `com.azure.messaging.servicebus.ServiceBusReceiverClient` to receive messages. If you provide the instances, they will be autowired.
 
 === Message Body
 In the producer, this component accepts message body of `String`, `byte[]` and `BinaryData` types or `List<String>`, `List<byte[]>` and `List<BinaryData>` to send batch messages.
@@ -108,7 +105,8 @@ In the consumer, the returned message body will be of type `String.
 |===
 
 
-==== Examples
+== Examples
+
 - `sendMessages`
 
 [source,java]
@@ -152,15 +150,6 @@ from("direct:start")
 [source,java]
 --------------------------------------------------------------------------------
 from("azure-servicebus:test//?connectionString=test")
-  .log("${body}")
-  .to("mock:result");
---------------------------------------------------------------------------------
-
-- `peekMessages`
-
-[source,java]
---------------------------------------------------------------------------------
-from("azure-servicebus:test//?connectionString=test&consumerOperation=peekMessages&peekNumMaxMessages=3")
   .log("${body}")
   .to("mock:result");
 --------------------------------------------------------------------------------

@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.camel.dsl.jbang.core.common;
 
 /**
@@ -37,6 +36,10 @@ public interface Printer {
 
     default void printf(String format, Object... args) {
         System.out.printf(format, args);
+    }
+
+    default void printErr(Exception e) {
+        printf("Error: %s%n", e.getMessage());
     }
 
     /**

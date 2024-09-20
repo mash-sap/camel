@@ -20,6 +20,13 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.security.KeyStore;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -27,21 +34,21 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import org.apache.camel.CamelConfiguration;
 import org.apache.camel.CamelContext;
+import org.apache.camel.CamelContextAware;
 import org.apache.camel.Component;
 import org.apache.camel.Configuration;
 import org.apache.camel.ExtendedCamelContext;
 import org.apache.camel.NoSuchLanguageException;
+import org.apache.camel.NonManagedService;
 import org.apache.camel.PropertiesLookupListener;
 import org.apache.camel.RuntimeCamelException;
 import org.apache.camel.Service;
@@ -51,12 +58,14 @@ import org.apache.camel.console.DevConsoleRegistry;
 import org.apache.camel.health.HealthCheck;
 import org.apache.camel.health.HealthCheckRegistry;
 import org.apache.camel.health.HealthCheckRepository;
+import org.apache.camel.impl.debugger.DebuggerJmxConnectorService;
 import org.apache.camel.impl.debugger.DefaultBacklogDebugger;
 import org.apache.camel.impl.engine.DefaultCompileStrategy;
 import org.apache.camel.impl.engine.DefaultRoutesLoader;
 import org.apache.camel.saga.CamelSagaService;
 import org.apache.camel.spi.AutowiredLifecycleStrategy;
 import org.apache.camel.spi.BacklogDebugger;
+import org.apache.camel.spi.BacklogTracer;
 import org.apache.camel.spi.CamelBeanPostProcessor;
 import org.apache.camel.spi.CamelEvent;
 import org.apache.camel.spi.CamelMetricsService;
@@ -64,6 +73,8 @@ import org.apache.camel.spi.CamelTracingService;
 import org.apache.camel.spi.CompileStrategy;
 import org.apache.camel.spi.ContextReloadStrategy;
 import org.apache.camel.spi.DataFormat;
+import org.apache.camel.spi.Debugger;
+import org.apache.camel.spi.DebuggerFactory;
 import org.apache.camel.spi.Language;
 import org.apache.camel.spi.LifecycleStrategy;
 import org.apache.camel.spi.PackageScanClassResolver;
@@ -81,10 +92,13 @@ import org.apache.camel.support.PluginHelper;
 import org.apache.camel.support.PropertyBindingSupport;
 import org.apache.camel.support.ResourceHelper;
 import org.apache.camel.support.SimpleEventNotifierSupport;
+import org.apache.camel.support.jsse.CipherSuitesParameters;
+import org.apache.camel.support.jsse.FilterParameters;
 import org.apache.camel.support.jsse.KeyManagersParameters;
 import org.apache.camel.support.jsse.KeyStoreParameters;
 import org.apache.camel.support.jsse.SSLContextParameters;
 import org.apache.camel.support.jsse.SSLContextServerParameters;
+import org.apache.camel.support.jsse.SecureRandomParameters;
 import org.apache.camel.support.jsse.TrustManagersParameters;
 import org.apache.camel.support.scan.PackageScanHelper;
 import org.apache.camel.support.service.BaseService;
@@ -101,12 +115,14 @@ import org.apache.camel.vault.VaultConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.camel.main.MainConstants.profilePropertyPlaceholderLocation;
 import static org.apache.camel.main.MainHelper.computeProperties;
 import static org.apache.camel.main.MainHelper.optionKey;
 import static org.apache.camel.main.MainHelper.setPropertiesOnTarget;
 import static org.apache.camel.main.MainHelper.validateOptionAndValue;
 import static org.apache.camel.util.LocationHelper.locationSummary;
 import static org.apache.camel.util.StringHelper.matches;
+import static org.apache.camel.util.StringHelper.startsWithIgnoreCase;
 
 /**
  * Base class for main implementations to allow bootstrapping Camel in standalone mode.
@@ -361,6 +377,27 @@ public abstract class BaseMainSupport extends BaseService {
         if (pc.getLocations().isEmpty()) {
             String locations = propertyPlaceholderLocations;
             if (locations == null) {
+                // ENV/SYS takes precedence, then java configured value
+                String profile = MainHelper.lookupPropertyFromSysOrEnv(MainConstants.PROFILE)
+                        .orElse(mainConfigurationProperties.getProfile());
+                if (profile == null) {
+                    // fallback to check if application.properties has a profile
+                    Properties prop = new Properties();
+                    try (InputStream is
+                            = ResourceHelper.resolveResourceAsInputStream(camelContext, "application.properties")) {
+                        if (is != null) {
+                            prop.load(is);
+                        }
+                    }
+                    profile = prop.getProperty("camel.main.profile");
+                }
+                if (profile != null) {
+                    mainConfigurationProperties.setProfile(profile);
+                    String loc = profilePropertyPlaceholderLocation(profile);
+                    if (!defaultPropertyPlaceholderLocation.contains(loc)) {
+                        defaultPropertyPlaceholderLocation = loc + "," + defaultPropertyPlaceholderLocation;
+                    }
+                }
                 locations
                         = MainHelper.lookupPropertyFromSysOrEnv(MainConstants.PROPERTY_PLACEHOLDER_LOCATION)
                                 .orElse(defaultPropertyPlaceholderLocation);
@@ -368,13 +405,13 @@ public abstract class BaseMainSupport extends BaseService {
             if (locations != null) {
                 locations = locations.trim();
             }
-            if (!Objects.equals(locations, "false")) {
+            if (ObjectHelper.isNotEmpty(locations) && !locations.endsWith("false")) {
                 pc.addLocation(locations);
-                if (MainConstants.DEFAULT_PROPERTY_PLACEHOLDER_LOCATION.equals(locations)) {
-                    LOG.debug("Using properties from: {}", locations);
+                if (defaultPropertyPlaceholderLocation.equals(locations)) {
+                    LOG.debug("Properties location: {}", locations);
                 } else {
                     // if not default location then log at INFO
-                    LOG.info("Using properties from: {}", locations);
+                    LOG.info("Properties location: {}", locations);
                 }
             }
         }
@@ -387,6 +424,15 @@ public abstract class BaseMainSupport extends BaseService {
         final Properties op = tryLoadProperties(overrideProperties, MainConstants.OVERRIDE_PROPERTIES_LOCATION, camelContext);
         if (op != null) {
             pc.setOverrideProperties(op);
+        }
+
+        Optional<String> cloudLocations = pc.resolveProperty(MainConstants.CLOUD_PROPERTIES_LOCATION);
+        if (cloudLocations.isPresent()) {
+            LOG.info("Cloud properties location: {}", cloudLocations);
+            final Properties kp = tryLoadCloudProperties(op, cloudLocations.get());
+            if (kp != null) {
+                pc.setOverrideProperties(kp);
+            }
         }
     }
 
@@ -404,6 +450,43 @@ public abstract class BaseMainSupport extends BaseService {
             }
         }
         return ip;
+    }
+
+    private static Properties tryLoadCloudProperties(
+            Properties overridProperties, String cloudPropertiesLocations)
+            throws IOException {
+        final OrderedLocationProperties cp = new OrderedLocationProperties();
+        try {
+            String[] locations = cloudPropertiesLocations.split(",");
+            for (String loc : locations) {
+                Path confPath = Paths.get(loc);
+                if (Files.exists(confPath) && Files.isDirectory(confPath)) {
+                    Files.walkFileTree(confPath, new SimpleFileVisitor<Path>() {
+                        @Override
+                        public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                            if (!Files.isDirectory(file)) {
+                                try {
+                                    String val = new String(Files.readAllBytes(file));
+                                    cp.put(loc, file.getFileName().toString(), val);
+                                } catch (IOException e) {
+                                    LOG.warn("Some error happened while reading property from cloud configuration file {}",
+                                            file, e);
+                                }
+                            }
+                            return FileVisitResult.CONTINUE;
+                        }
+                    });
+                }
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        if (overridProperties == null) {
+            return cp;
+        }
+        Properties mergedProperties = new Properties(overridProperties);
+        mergedProperties.putAll(cp);
+        return mergedProperties;
     }
 
     protected void configureLifecycle(CamelContext camelContext) throws Exception {
@@ -430,6 +513,9 @@ public abstract class BaseMainSupport extends BaseService {
     protected void autoconfigure(CamelContext camelContext) throws Exception {
         // gathers the properties (key=value) that was auto-configured
         final OrderedLocationProperties autoConfiguredProperties = new OrderedLocationProperties();
+
+        // configure the profile with pre-configured settings
+        ProfileConfigurer.configureMain(camelContext, mainConfigurationProperties.getProfile(), mainConfigurationProperties);
 
         // need to eager allow to auto-configure properties component
         if (mainConfigurationProperties.isAutoConfigurationEnabled()) {
@@ -466,6 +552,15 @@ public abstract class BaseMainSupport extends BaseService {
             camelContext.addService(new MainPropertiesReload(this));
         }
 
+        // capture startup configuration
+        DevConsoleRegistry dcr = camelContext.getCamelContextExtension().getContextPlugin(DevConsoleRegistry.class);
+        if (dcr != null) {
+            MainConfigurationDevConsole mc = (MainConfigurationDevConsole) dcr.resolveById("main-configuration");
+            if (mc != null) {
+                mc.addStartupConfiguration(autoConfiguredProperties);
+            }
+        }
+
         // log summary of configurations
         if (mainConfigurationProperties.isAutoConfigurationLogSummary() && !autoConfiguredProperties.isEmpty()) {
             logConfigurationSummary(autoConfiguredProperties);
@@ -477,37 +572,10 @@ public abstract class BaseMainSupport extends BaseService {
 
     private static void logConfigurationSummary(OrderedLocationProperties autoConfiguredProperties) {
         // first log variables
-        doLogConfigurationSummary(autoConfiguredProperties, "Variables summary", (k) -> k.startsWith("camel.variable."));
+        MainHelper.logConfigurationSummary(LOG, autoConfiguredProperties, "Variables summary",
+                (k) -> k.startsWith("camel.variable."));
         // then log standard options
-        doLogConfigurationSummary(autoConfiguredProperties, "Auto-configuration summary", null);
-    }
-
-    private static void doLogConfigurationSummary(
-            OrderedLocationProperties autoConfiguredProperties, String title, Predicate<String> filter) {
-        boolean header = false;
-        List<String> toRemove = new ArrayList<>();
-        for (var entry : autoConfiguredProperties.entrySet()) {
-            String k = entry.getKey().toString();
-            if (filter == null || filter.test(k)) {
-                Object v = entry.getValue();
-                String loc = locationSummary(autoConfiguredProperties, k);
-
-                // tone down logging noise for our own internal configurations
-                boolean debug = loc.contains("[camel-main]");
-                if (debug && !LOG.isDebugEnabled()) {
-                    continue;
-                }
-
-                if (!header) {
-                    LOG.info(title);
-                    header = true;
-                }
-
-                sensitiveAwareLogging(k, v, loc, debug);
-                toRemove.add(k);
-            }
-        }
-        toRemove.forEach(autoConfiguredProperties::remove);
+        MainHelper.logConfigurationSummary(LOG, autoConfiguredProperties, "Auto-configuration summary", null);
     }
 
     protected void configureStartupRecorder(CamelContext camelContext) {
@@ -579,6 +647,21 @@ public abstract class BaseMainSupport extends BaseService {
             if (base != null && !base.equals(current)) {
                 camelContext.getCamelContextExtension().setBasePackageScan(base);
                 LOG.info("Classpath scanning enabled from base package: {}", base);
+            }
+        }
+    }
+
+    protected void configureMainListener(CamelContext camelContext) throws Exception {
+        // any custom listener in registry
+        camelContext.getRegistry().findByType(MainListener.class).forEach(this::addMainListener);
+        // listener from configuration
+        mainConfigurationProperties.getMainListeners().forEach(this::addMainListener);
+        if (mainConfigurationProperties.getMainListenerClasses() != null) {
+            for (String fqn : mainConfigurationProperties.getMainListenerClasses().split(",")) {
+                fqn = fqn.trim();
+                Class<? extends MainListener> clazz
+                        = camelContext.getClassResolver().resolveMandatoryClass(fqn, MainListener.class);
+                addMainListener(camelContext.getInjector().newInstance(clazz));
             }
         }
     }
@@ -665,6 +748,8 @@ public abstract class BaseMainSupport extends BaseService {
         configurePackageScan(camelContext);
         // configure to use our main routes loader
         configureRoutesLoader(camelContext);
+        // configure custom main listeners
+        configureMainListener(camelContext);
 
         // ensure camel context is build
         camelContext.build();
@@ -691,6 +776,8 @@ public abstract class BaseMainSupport extends BaseService {
         configureLifecycle(camelContext);
 
         if (standalone) {
+            // detect if camel-debug JAR is on classpath as we need to know this before configuring routes
+            detectCamelDebugJar(camelContext);
             step = recorder.beginStep(BaseMainSupport.class, "configureRoutes", "Collect Routes");
             configureRoutes(camelContext);
             recorder.endStep(step);
@@ -709,41 +796,16 @@ public abstract class BaseMainSupport extends BaseService {
         // we want to log the property placeholder summary after routes has been started,
         // but before camel context logs that it has been started, so we need to use an event listener
         if (standalone && mainConfigurationProperties.isAutoConfigurationLogSummary()) {
-            camelContext.getManagementStrategy().addEventNotifier(new SimpleEventNotifierSupport() {
-                @Override
-                public boolean isEnabled(CamelEvent event) {
-                    return event instanceof CamelEvent.CamelContextRoutesStartedEvent;
-                }
+            camelContext.getManagementStrategy().addEventNotifier(new PlaceholderSummaryEventNotifier(propertyPlaceholders));
+        }
+    }
 
-                @Override
-                public void notify(CamelEvent event) throws Exception {
-                    // log summary of configurations
-                    if (!propertyPlaceholders.isEmpty()) {
-                        boolean header = true;
-                        for (var entry : propertyPlaceholders.entrySet()) {
-                            String k = entry.getKey().toString();
-                            Object v = entry.getValue();
-                            Object dv = propertyPlaceholders.getDefaultValue(k);
-                            // skip logging configurations that are using default-value
-                            // or a kamelet that uses templateId as a parameter
-                            boolean same = ObjectHelper.equal(v, dv);
-                            boolean skip = "templateId".equals(k);
-                            if (!same && !skip) {
-                                if (header) {
-                                    LOG.info("Property-placeholders summary");
-                                    header = false;
-                                }
-                                String loc = locationSummary(propertyPlaceholders, k);
-                                if (SensitiveUtils.containsSensitive(k)) {
-                                    LOG.info("    {} {}=xxxxxx", loc, k);
-                                } else {
-                                    LOG.info("    {} {}={}", loc, k, v);
-                                }
-                            }
-                        }
-                    }
-                }
-            });
+    protected void detectCamelDebugJar(CamelContext camelContext) {
+        DebuggerFactory df = camelContext.getCamelContextExtension().getBootstrapFactoryFinder()
+                .newInstance(Debugger.FACTORY, DebuggerFactory.class).orElse(null);
+        if (df != null) {
+            // if camel-debug is on classpath then we need to eager to turn on source location which is needed for Java DSL
+            camelContext.setSourceLocationEnabled(true);
         }
     }
 
@@ -991,118 +1053,125 @@ public abstract class BaseMainSupport extends BaseService {
         OrderedLocationProperties httpServerProperties = new OrderedLocationProperties();
         OrderedLocationProperties sslProperties = new OrderedLocationProperties();
         OrderedLocationProperties debuggerProperties = new OrderedLocationProperties();
+        OrderedLocationProperties tracerProperties = new OrderedLocationProperties();
         OrderedLocationProperties routeControllerProperties = new OrderedLocationProperties();
         for (String key : prop.stringPropertyNames()) {
             String loc = prop.getLocation(key);
-            if (key.startsWith("camel.context.")) {
+            if (startsWithIgnoreCase(key, "camel.context.")) {
                 // grab the value
                 String value = prop.getProperty(key);
                 String option = key.substring(14);
                 validateOptionAndValue(key, option, value);
                 contextProperties.put(loc, optionKey(option), value);
-            } else if (key.startsWith("camel.resilience4j.")) {
+            } else if (startsWithIgnoreCase(key, "camel.resilience4j.")) {
                 // grab the value
                 String value = prop.getProperty(key);
                 String option = key.substring(19);
                 validateOptionAndValue(key, option, value);
                 resilience4jProperties.put(loc, optionKey(option), value);
-            } else if (key.startsWith("camel.faulttolerance.")) {
+            } else if (startsWithIgnoreCase(key, "camel.faulttolerance.")) {
                 // grab the value
                 String value = prop.getProperty(key);
                 String option = key.substring(21);
                 validateOptionAndValue(key, option, value);
                 faultToleranceProperties.put(loc, optionKey(option), value);
-            } else if (key.startsWith("camel.rest.")) {
+            } else if (startsWithIgnoreCase(key, "camel.rest.")) {
                 // grab the value
                 String value = prop.getProperty(key);
                 String option = key.substring(11);
                 validateOptionAndValue(key, option, value);
                 restProperties.put(loc, optionKey(option), value);
-            } else if (key.startsWith("camel.vault.")) {
+            } else if (startsWithIgnoreCase(key, "camel.vault.")) {
                 // grab the value
                 String value = prop.getProperty(key);
                 String option = key.substring(12);
                 validateOptionAndValue(key, option, value);
                 vaultProperties.put(loc, optionKey(option), value);
-            } else if (key.startsWith("camel.threadpool.")) {
+            } else if (startsWithIgnoreCase(key, "camel.threadpool.")) {
                 // grab the value
                 String value = prop.getProperty(key);
                 String option = key.substring(17);
                 validateOptionAndValue(key, option, value);
                 threadPoolProperties.put(loc, optionKey(option), value);
-            } else if (key.startsWith("camel.health.")) {
+            } else if (startsWithIgnoreCase(key, "camel.health.")) {
                 // grab the value
                 String value = prop.getProperty(key);
                 String option = key.substring(13);
                 validateOptionAndValue(key, option, value);
                 healthProperties.put(loc, optionKey(option), value);
-            } else if (key.startsWith("camel.lra.")) {
+            } else if (startsWithIgnoreCase(key, "camel.lra.")) {
                 // grab the value
                 String value = prop.getProperty(key);
                 String option = key.substring(10);
                 validateOptionAndValue(key, option, value);
                 lraProperties.put(loc, optionKey(option), value);
-            } else if (key.startsWith("camel.opentelemetry.")) {
+            } else if (startsWithIgnoreCase(key, "camel.opentelemetry.")) {
                 // grab the value
                 String value = prop.getProperty(key);
                 String option = key.substring(20);
                 validateOptionAndValue(key, option, value);
                 otelProperties.put(loc, optionKey(option), value);
-            } else if (key.startsWith("camel.metrics.")) {
+            } else if (startsWithIgnoreCase(key, "camel.metrics.")) {
                 // grab the value
                 String value = prop.getProperty(key);
                 String option = key.substring(14);
                 validateOptionAndValue(key, option, value);
                 metricsProperties.put(loc, optionKey(option), value);
-            } else if (key.startsWith("camel.routeTemplate")) {
+            } else if (startsWithIgnoreCase(key, "camel.routeTemplate")) {
                 // grab the value
                 String value = prop.getProperty(key);
                 String option = key.substring(19);
                 validateOptionAndValue(key, option, value);
                 routeTemplateProperties.put(loc, optionKey(option), value);
-            } else if (key.startsWith("camel.devConsole.")) {
+            } else if (startsWithIgnoreCase(key, "camel.devConsole.")) {
                 // grab the value
                 String value = prop.getProperty(key);
                 String option = key.substring(17);
                 validateOptionAndValue(key, option, value);
                 devConsoleProperties.put(loc, optionKey(option), value);
-            } else if (key.startsWith("camel.variable.")) {
+            } else if (startsWithIgnoreCase(key, "camel.variable.")) {
                 // grab the value
                 String value = prop.getProperty(key);
                 String option = key.substring(15);
                 validateOptionAndValue(key, option, value);
                 variableProperties.put(loc, optionKey(option), value);
-            } else if (key.startsWith("camel.beans.")) {
+            } else if (startsWithIgnoreCase(key, "camel.beans.")) {
                 // grab the value
                 String value = prop.getProperty(key);
                 String option = key.substring(12);
                 validateOptionAndValue(key, option, value);
                 beansProperties.put(loc, optionKey(option), value);
-            } else if (key.startsWith("camel.globalOptions.")) {
+            } else if (startsWithIgnoreCase(key, "camel.globalOptions.")) {
                 // grab the value
                 String value = prop.getProperty(key);
                 String option = key.substring(20);
                 validateOptionAndValue(key, option, value);
                 globalOptions.put(loc, optionKey(option), value);
-            } else if (key.startsWith("camel.server.")) {
+            } else if (startsWithIgnoreCase(key, "camel.server.")) {
                 // grab the value
                 String value = prop.getProperty(key);
                 String option = key.substring(13);
                 validateOptionAndValue(key, option, value);
                 httpServerProperties.put(loc, optionKey(option), value);
-            } else if (key.startsWith("camel.ssl.")) {
+            } else if (startsWithIgnoreCase(key, "camel.ssl.")) {
                 // grab the value
                 String value = prop.getProperty(key);
                 String option = key.substring(10);
                 validateOptionAndValue(key, option, value);
                 sslProperties.put(loc, optionKey(option), value);
-            } else if (key.startsWith("camel.debug.")) {
+            } else if (startsWithIgnoreCase(key, "camel.debug.")) {
                 // grab the value
                 String value = prop.getProperty(key);
                 String option = key.substring(12);
                 validateOptionAndValue(key, option, value);
                 debuggerProperties.put(loc, optionKey(option), value);
-            } else if (key.startsWith("camel.routeController.")) {
+            } else if (startsWithIgnoreCase(key, "camel.trace.")) {
+                // grab the value
+                String value = prop.getProperty(key);
+                String option = key.substring(12);
+                validateOptionAndValue(key, option, value);
+                tracerProperties.put(loc, optionKey(option), value);
+            } else if (startsWithIgnoreCase(key, "camel.routeController.")) {
                 // grab the value
                 String value = prop.getProperty(key);
                 String option = key.substring(22);
@@ -1203,6 +1272,12 @@ public abstract class BaseMainSupport extends BaseService {
         if (!debuggerProperties.isEmpty() || mainConfigurationProperties.hasDebuggerConfiguration()) {
             LOG.debug("Auto-configuring Debugger from loaded properties: {}", debuggerProperties.size());
             setDebuggerProperties(camelContext, debuggerProperties,
+                    mainConfigurationProperties.isAutoConfigurationFailFast(),
+                    autoConfiguredProperties);
+        }
+        if (!tracerProperties.isEmpty() || mainConfigurationProperties.hasTracerConfiguration()) {
+            LOG.debug("Auto-configuring Tracer from loaded properties: {}", tracerProperties.size());
+            setTracerProperties(camelContext, tracerProperties,
                     mainConfigurationProperties.isAutoConfigurationFailFast(),
                     autoConfiguredProperties);
         }
@@ -1572,6 +1647,9 @@ public abstract class BaseMainSupport extends BaseService {
             if ("hashicorp".equalsIgnoreCase(name)) {
                 target = target.hashicorp();
             }
+            if ("kubernetes".equalsIgnoreCase(name)) {
+                target = target.kubernetes();
+            }
             // configure all the properties on the vault at once (to ensure they are configured in right order)
             OrderedLocationProperties config = MainHelper.extractProperties(properties, name + ".");
             setPropertiesOnTarget(camelContext, target, config, "camel.vault." + name + ".", failIfNotSet, true,
@@ -1591,34 +1669,89 @@ public abstract class BaseMainSupport extends BaseService {
             return;
         }
 
-        String password = sslConfig.getKeystorePassword();
         KeyStoreParameters ksp = new KeyStoreParameters();
+        ksp.setCamelContext(camelContext);
         ksp.setResource(sslConfig.getKeyStore());
-        ksp.setPassword(password);
+        ksp.setType(sslConfig.getKeyStoreType());
+        ksp.setPassword(sslConfig.getKeystorePassword());
+        ksp.setProvider(sslConfig.getKeyStoreProvider());
 
         KeyManagersParameters kmp = new KeyManagersParameters();
-        kmp.setKeyPassword(password);
+        kmp.setCamelContext(camelContext);
+        kmp.setKeyPassword(sslConfig.getKeystorePassword());
         kmp.setKeyStore(ksp);
+        kmp.setAlgorithm(sslConfig.getKeyManagerAlgorithm());
+        kmp.setProvider(sslConfig.getKeyManagerProvider());
+
+        final SSLContextParameters sslContextParameters = createSSLContextParameters(camelContext, sslConfig, kmp);
+        camelContext.setSSLContextParameters(sslContextParameters);
+    }
+
+    private static SSLContextParameters createSSLContextParameters(
+            CamelContext camelContext,
+            SSLConfigurationProperties sslConfig, KeyManagersParameters kmp) {
 
         TrustManagersParameters tmp = null;
         if (sslConfig.getTrustStore() != null) {
             KeyStoreParameters tsp = new KeyStoreParameters();
-            tsp.setResource(sslConfig.getTrustStore());
+            String store = sslConfig.getTrustStore();
+            if (store != null && store.startsWith("#bean:")) {
+                tsp.setKeyStore(CamelContextHelper.mandatoryLookup(camelContext, store.substring(6), KeyStore.class));
+            } else {
+                tsp.setResource(store);
+            }
             tsp.setPassword(sslConfig.getTrustStorePassword());
-
             tmp = new TrustManagersParameters();
+            tmp.setCamelContext(camelContext);
             tmp.setKeyStore(tsp);
         }
 
         SSLContextServerParameters scsp = new SSLContextServerParameters();
+        scsp.setCamelContext(camelContext);
         scsp.setClientAuthentication(sslConfig.getClientAuthentication());
 
+        SecureRandomParameters srp = null;
+        if (sslConfig.getSecureRandomAlgorithm() != null || sslConfig.getSecureRandomProvider() != null) {
+            srp = new SecureRandomParameters();
+            srp.setCamelContext(camelContext);
+            srp.setAlgorithm(sslConfig.getSecureRandomAlgorithm());
+            srp.setProvider(sslConfig.getSecureRandomProvider());
+        }
+
         SSLContextParameters sslContextParameters = new SSLContextParameters();
+        sslContextParameters.setCamelContext(camelContext);
+        sslContextParameters.setProvider(sslConfig.getProvider());
+        sslContextParameters.setSecureSocketProtocol(sslConfig.getSecureSocketProtocol());
+        sslContextParameters.setCertAlias(sslConfig.getCertAlias());
+        if (sslConfig.getSessionTimeout() > 0) {
+            sslContextParameters.setSessionTimeout("" + sslConfig.getSessionTimeout());
+        }
+        if (sslConfig.getCipherSuites() != null) {
+            CipherSuitesParameters csp = new CipherSuitesParameters();
+            for (String c : sslConfig.getCipherSuites().split(",")) {
+                csp.addCipherSuite(c);
+            }
+            sslContextParameters.setCipherSuites(csp);
+        }
+        if (sslConfig.getCipherSuitesInclude() != null || sslConfig.getCipherSuitesExclude() != null) {
+            FilterParameters fp = new FilterParameters();
+            if (sslConfig.getCipherSuitesInclude() != null) {
+                for (String c : sslConfig.getCipherSuitesInclude().split(",")) {
+                    fp.addInclude(c);
+                }
+            }
+            if (sslConfig.getCipherSuitesExclude() != null) {
+                for (String c : sslConfig.getCipherSuitesExclude().split(",")) {
+                    fp.addExclude(c);
+                }
+            }
+            sslContextParameters.setCipherSuitesFilter(fp);
+        }
         sslContextParameters.setKeyManagers(kmp);
         sslContextParameters.setTrustManagers(tmp);
         sslContextParameters.setServerParameters(scsp);
-
-        camelContext.setSSLContextParameters(sslContextParameters);
+        sslContextParameters.setSecureRandom(srp);
+        return sslContextParameters;
     }
 
     private void setDebuggerProperties(
@@ -1634,8 +1767,10 @@ public abstract class BaseMainSupport extends BaseService {
             return;
         }
 
-        // must enable source location so debugger tooling knows to map breakpoints to source code
+        // must enable source location and history
+        // so debugger tooling knows to map breakpoints to source code
         camelContext.setSourceLocationEnabled(true);
+        camelContext.setMessageHistory(true);
 
         // enable debugger on camel
         camelContext.setDebugging(config.isEnabled());
@@ -1652,8 +1787,16 @@ public abstract class BaseMainSupport extends BaseService {
         debugger.setIncludeExchangeVariables(config.isIncludeExchangeVariables());
         debugger.setIncludeException(config.isIncludeException());
         debugger.setLoggingLevel(config.getLoggingLevel().name());
-        debugger.setSuspendMode(config.isWaitForAttach());
+        debugger.setSuspendMode(config.isWaitForAttach()); // this option is named wait-for-attach
         debugger.setFallbackTimeout(config.getFallbackTimeout());
+
+        // enable jmx connector if port is set
+        if (config.isJmxConnectorEnabled()) {
+            DebuggerJmxConnectorService connector = new DebuggerJmxConnectorService();
+            connector.setCreateConnector(true);
+            connector.setRegistryPort(config.getJmxConnectorPort());
+            camelContext.addService(connector);
+        }
 
         // start debugger after context is started
         camelContext.addLifecycleStrategy(new LifecycleStrategySupport() {
@@ -1672,6 +1815,47 @@ public abstract class BaseMainSupport extends BaseService {
         });
 
         camelContext.addService(debugger);
+    }
+
+    private void setTracerProperties(
+            CamelContext camelContext, OrderedLocationProperties properties,
+            boolean failIfNotSet, OrderedLocationProperties autoConfiguredProperties)
+            throws Exception {
+
+        TracerConfigurationProperties config = mainConfigurationProperties.tracerConfig();
+        setPropertiesOnTarget(camelContext, config, properties, "camel.trace.",
+                failIfNotSet, true, autoConfiguredProperties);
+
+        if (!config.isEnabled() && !config.isStandby()) {
+            return;
+        }
+
+        // must enable source location so tracer tooling knows to map breakpoints to source code
+        camelContext.setSourceLocationEnabled(true);
+
+        // enable tracer on camel
+        camelContext.setBacklogTracing(config.isEnabled());
+        camelContext.setBacklogTracingStandby(config.isStandby());
+        camelContext.setBacklogTracingTemplates(config.isTraceTemplates());
+
+        BacklogTracer tracer = org.apache.camel.impl.debugger.BacklogTracer.createTracer(camelContext);
+        tracer.setEnabled(config.isEnabled());
+        tracer.setStandby(config.isStandby());
+        tracer.setBacklogSize(config.getBacklogSize());
+        tracer.setRemoveOnDump(config.isRemoveOnDump());
+        tracer.setBodyMaxChars(config.getBodyMaxChars());
+        tracer.setBodyIncludeStreams(config.isBodyIncludeStreams());
+        tracer.setBodyIncludeFiles(config.isBodyIncludeFiles());
+        tracer.setIncludeExchangeProperties(config.isIncludeExchangeProperties());
+        tracer.setIncludeExchangeVariables(config.isIncludeExchangeVariables());
+        tracer.setIncludeException(config.isIncludeException());
+        tracer.setTraceRests(config.isTraceRests());
+        tracer.setTraceTemplates(config.isTraceTemplates());
+        tracer.setTracePattern(config.getTracePattern());
+        tracer.setTraceFilter(config.getTraceFilter());
+
+        camelContext.getCamelContextExtension().addContextPlugin(BacklogTracer.class, tracer);
+        camelContext.addService(tracer);
     }
 
     private void setRouteControllerProperties(
@@ -2019,16 +2203,23 @@ public abstract class BaseMainSupport extends BaseService {
 
         for (String key : prop.stringPropertyNames()) {
             computeProperties("camel.component.", key, prop, properties, name -> {
+                boolean optional = name.startsWith("?");
+                if (optional) {
+                    name = name.substring(1);
+                }
                 if (reload) {
                     // force re-creating component on reload
                     camelContext.removeComponent(name);
                 }
                 // its an existing component name
-                Component target = camelContext.getComponent(name);
-                if (target == null) {
+                Component target = optional ? camelContext.hasComponent(name) : camelContext.getComponent(name);
+                if (target == null && !optional) {
                     throw new IllegalArgumentException(
                             "Error configuring property: " + key + " because cannot find component with name " + name
                                                        + ". Make sure you have the component on the classpath");
+                }
+                if (target == null) {
+                    return Collections.EMPTY_LIST;
                 }
                 return Collections.singleton(target);
             });
@@ -2039,7 +2230,6 @@ public abstract class BaseMainSupport extends BaseService {
                             "Error configuring property: " + key + " because cannot find dataformat with name " + name
                                                        + ". Make sure you have the dataformat on the classpath");
                 }
-
                 return Collections.singleton(target);
             });
             computeProperties("camel.language.", key, prop, properties, name -> {
@@ -2051,7 +2241,6 @@ public abstract class BaseMainSupport extends BaseService {
                             "Error configuring property: " + key + " because cannot find language with name " + name
                                                        + ". Make sure you have the language on the classpath");
                 }
-
                 return Collections.singleton(target);
             });
         }
@@ -2136,11 +2325,21 @@ public abstract class BaseMainSupport extends BaseService {
             }
             // log summary of configurations
             if (mainConfigurationProperties.isAutoConfigurationLogSummary() && !autoConfiguredProperties.isEmpty()) {
+                MainConfigurationDevConsole mc = null;
+                DevConsoleRegistry dcr = camelContext.getCamelContextExtension().getContextPlugin(DevConsoleRegistry.class);
+                if (dcr != null) {
+                    mc = (MainConfigurationDevConsole) dcr.resolveById("main-configuration");
+                }
                 boolean header = false;
                 for (var entry : autoConfiguredProperties.entrySet()) {
                     String k = entry.getKey().toString();
                     Object v = entry.getValue();
                     String loc = locationSummary(autoConfiguredProperties, k);
+
+                    if (mc != null) {
+                        // also capture autowired configuration
+                        mc.addStartupConfiguration(loc, k, v);
+                    }
 
                     // tone down logging noise for our own internal configurations
                     boolean debug = loc.contains("[camel-main]");
@@ -2153,27 +2352,11 @@ public abstract class BaseMainSupport extends BaseService {
                         header = true;
                     }
 
-                    sensitiveAwareLogging(k, v, loc, debug);
+                    MainHelper.sensitiveAwareLogging(LOG, k, v, loc, debug);
                 }
             }
         } catch (Exception e) {
             throw RuntimeCamelException.wrapRuntimeException(e);
-        }
-    }
-
-    private static void sensitiveAwareLogging(String k, Object v, String loc, boolean debug) {
-        if (SensitiveUtils.containsSensitive(k)) {
-            if (debug) {
-                LOG.debug("    {} {}=xxxxxx", loc, k);
-            } else {
-                LOG.info("    {} {}=xxxxxx", loc, k);
-            }
-        } else {
-            if (debug) {
-                LOG.debug("    {} {}={}", loc, k, v);
-            } else {
-                LOG.info("    {} {}={}", loc, k, v);
-            }
         }
     }
 
@@ -2228,7 +2411,7 @@ public abstract class BaseMainSupport extends BaseService {
                     .orElseThrow(() -> new IllegalArgumentException(
                             "Cannot find MainHttpServerFactory on classpath. Add camel-platform-http-main to classpath."));
         }
-        return answer;
+        return CamelContextAware.trySetCamelContext(answer, camelContext);
     }
 
     private static final class PropertyPlaceholderListener implements PropertiesLookupListener {
@@ -2248,4 +2431,45 @@ public abstract class BaseMainSupport extends BaseService {
         }
     }
 
+    private static class PlaceholderSummaryEventNotifier extends SimpleEventNotifierSupport implements NonManagedService {
+        private final OrderedLocationProperties propertyPlaceholders;
+
+        public PlaceholderSummaryEventNotifier(OrderedLocationProperties propertyPlaceholders) {
+            this.propertyPlaceholders = propertyPlaceholders;
+        }
+
+        @Override
+        public boolean isEnabled(CamelEvent event) {
+            return event instanceof CamelEvent.CamelContextRoutesStartedEvent;
+        }
+
+        @Override
+        public void notify(CamelEvent event) throws Exception {
+            // log summary of configurations
+            if (!propertyPlaceholders.isEmpty()) {
+                boolean header = true;
+                for (var entry : propertyPlaceholders.entrySet()) {
+                    String k = entry.getKey().toString();
+                    Object v = entry.getValue();
+                    Object dv = propertyPlaceholders.getDefaultValue(k);
+                    // skip logging configurations that are using default-value
+                    // or a kamelet that uses templateId as a parameter
+                    boolean same = ObjectHelper.equal(v, dv);
+                    boolean skip = "templateId".equals(k);
+                    if (!same && !skip) {
+                        if (header) {
+                            LOG.info("Property-placeholders summary");
+                            header = false;
+                        }
+                        String loc = locationSummary(propertyPlaceholders, k);
+                        if (SensitiveUtils.containsSensitive(k)) {
+                            LOG.info("    {} {} = xxxxxx", loc, k);
+                        } else {
+                            LOG.info("    {} {} = {}", loc, k, v);
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

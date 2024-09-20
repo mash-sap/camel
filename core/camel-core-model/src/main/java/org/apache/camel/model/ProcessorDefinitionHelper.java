@@ -155,8 +155,8 @@ public final class ProcessorDefinitionHelper {
             def = def.getParent();
         }
 
-        if (def instanceof RouteDefinition) {
-            return (RouteDefinition) def;
+        if (def instanceof RouteDefinition routeDefinition) {
+            return routeDefinition;
         } else {
             // not found
             return null;
@@ -202,7 +202,7 @@ public final class ProcessorDefinitionHelper {
 
         // add ourselves
         if (node.getId() != null) {
-            if (!onlyCustomId || node.hasCustomIdAssigned() && onlyCustomId) {
+            if (!onlyCustomId || node.hasCustomIdAssigned()) {
                 set.add(node.getId());
             }
         }
@@ -281,16 +281,13 @@ public final class ProcessorDefinitionHelper {
         for (ProcessorDefinition out : outputs) {
 
             // send is much common
-            if (out instanceof SendDefinition) {
-                SendDefinition send = (SendDefinition) out;
+            if (out instanceof SendDefinition send) {
                 List<ProcessorDefinition<?>> children = send.getOutputs();
                 doFindType(children, type, found, ++current, maxDeep);
             }
 
             // special for choice
-            if (out instanceof ChoiceDefinition) {
-                ChoiceDefinition choice = (ChoiceDefinition) out;
-
+            if (out instanceof ChoiceDefinition choice) {
                 // ensure to add ourself if we match also
                 if (type.isInstance(choice)) {
                     found.add((T) choice);
@@ -319,9 +316,7 @@ public final class ProcessorDefinitionHelper {
             }
 
             // special for try ... catch ... finally
-            if (out instanceof TryDefinition) {
-                TryDefinition doTry = (TryDefinition) out;
-
+            if (out instanceof TryDefinition doTry) {
                 // ensure to add ourself if we match also
                 if (type.isInstance(doTry)) {
                     found.add((T) doTry);
@@ -357,9 +352,7 @@ public final class ProcessorDefinitionHelper {
             }
 
             // special for some types which has special outputs
-            if (out instanceof OutputDefinition) {
-                OutputDefinition outDef = (OutputDefinition) out;
-
+            if (out instanceof OutputDefinition outDef) {
                 // ensure to add ourself if we match also
                 if (type.isInstance(outDef)) {
                     found.add((T) outDef);
@@ -459,6 +452,25 @@ public final class ProcessorDefinitionHelper {
             node = node.getParent();
         }
         return null;
+    }
+
+    /**
+     * Performs a depp copy of the list of model classes
+     *
+     * @param  models list of model classes
+     * @return        a new list containing a deep copy of the model classes
+     */
+    public static List deepCopyDefinitions(List models) {
+        var answer = new ArrayList();
+        if (models != null) {
+            for (var def : models) {
+                if (def instanceof CopyableDefinition<?> copy) {
+                    def = copy.copyDefinition();
+                }
+                answer.add(def);
+            }
+        }
+        return answer;
     }
 
 }

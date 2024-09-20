@@ -35,15 +35,13 @@ import org.apache.camel.Processor;
 import org.apache.camel.Route;
 import org.apache.camel.RouteTemplateContext;
 import org.apache.camel.StartupStep;
-import org.apache.camel.ValueHolder;
 import org.apache.camel.api.management.JmxSystemPropertyKeys;
 import org.apache.camel.impl.engine.DefaultExecutorServiceManager;
 import org.apache.camel.impl.engine.RouteService;
 import org.apache.camel.impl.engine.SimpleCamelContext;
-import org.apache.camel.impl.engine.TransformerKey;
-import org.apache.camel.impl.engine.ValidatorKey;
 import org.apache.camel.impl.scan.AssignableToPackageScanFilter;
 import org.apache.camel.impl.scan.InvertingPackageScanFilter;
+import org.apache.camel.model.BeanFactoryDefinition;
 import org.apache.camel.model.DataFormatDefinition;
 import org.apache.camel.model.FaultToleranceConfigurationDefinition;
 import org.apache.camel.model.Model;
@@ -57,7 +55,6 @@ import org.apache.camel.model.RouteDefinition;
 import org.apache.camel.model.RouteDefinitionHelper;
 import org.apache.camel.model.RouteTemplateDefinition;
 import org.apache.camel.model.TemplatedRouteDefinition;
-import org.apache.camel.model.app.RegistryBeanDefinition;
 import org.apache.camel.model.cloud.ServiceCallConfigurationDefinition;
 import org.apache.camel.model.language.ExpressionDefinition;
 import org.apache.camel.model.rest.RestDefinition;
@@ -75,8 +72,10 @@ import org.apache.camel.spi.PropertiesComponent;
 import org.apache.camel.spi.Registry;
 import org.apache.camel.spi.StartupStepRecorder;
 import org.apache.camel.spi.Transformer;
+import org.apache.camel.spi.TransformerKey;
 import org.apache.camel.spi.UuidGenerator;
 import org.apache.camel.spi.Validator;
+import org.apache.camel.spi.ValidatorKey;
 import org.apache.camel.support.CamelContextHelper;
 import org.apache.camel.support.DefaultRegistry;
 import org.apache.camel.support.LocalBeanRegistry;
@@ -105,7 +104,7 @@ public class DefaultCamelContext extends SimpleCamelContext implements ModelCame
     private static final Logger LOG = LoggerFactory.getLogger(DefaultCamelContext.class);
     private static final UuidGenerator UUID = new SimpleUuidGenerator();
 
-    private Model model = new DefaultModel(this);
+    private final Model model = new DefaultModel(this);
 
     /**
      * Creates the {@link ModelCamelContext} using {@link org.apache.camel.support.DefaultRegistry} as registry.
@@ -229,12 +228,6 @@ public class DefaultCamelContext extends SimpleCamelContext implements ModelCame
             resolver.addFilter(new InvertingPackageScanFilter(new AssignableToPackageScanFilter(excludedClasses)));
         }
         return resolver;
-    }
-
-    @Override
-    public void disposeModel() {
-        LOG.debug("Disposing Model on CamelContext");
-        model = null;
     }
 
     @Override
@@ -523,13 +516,13 @@ public class DefaultCamelContext extends SimpleCamelContext implements ModelCame
     }
 
     @Override
-    public void addRegistryBean(RegistryBeanDefinition bean) {
-        model.addRegistryBean(bean);
+    public void addCustomBean(BeanFactoryDefinition<?> bean) {
+        model.addCustomBean(bean);
     }
 
     @Override
-    public List<RegistryBeanDefinition> getRegistryBeans() {
-        return model.getRegistryBeans();
+    public List<BeanFactoryDefinition<?>> getCustomBeans() {
+        return model.getCustomBeans();
     }
 
     @Override
@@ -559,14 +552,19 @@ public class DefaultCamelContext extends SimpleCamelContext implements ModelCame
     }
 
     @Override
-    protected synchronized void shutdownRouteService(RouteService routeService) throws Exception {
-        if (model != null) {
-            RouteDefinition rd = model.getRouteDefinition(routeService.getId());
-            if (rd != null) {
-                model.getRouteDefinitions().remove(rd);
+    protected void shutdownRouteService(RouteService routeService) throws Exception {
+        getLock().lock();
+        try {
+            if (model != null) {
+                RouteDefinition rd = model.getRouteDefinition(routeService.getId());
+                if (rd != null) {
+                    model.getRouteDefinitions().remove(rd);
+                }
             }
+            super.shutdownRouteService(routeService);
+        } finally {
+            getLock().unlock();
         }
-        super.shutdownRouteService(routeService);
     }
 
     @Override
@@ -618,8 +616,9 @@ public class DefaultCamelContext extends SimpleCamelContext implements ModelCame
         // route templates supports binding beans that are local for the template only
         // in this local mode then we need to check for side-effects (see further)
         LocalBeanRepositoryAware localBeans = null;
-        if (getCamelContextReference().getRegistry() instanceof LocalBeanRepositoryAware) {
-            localBeans = (LocalBeanRepositoryAware) getCamelContextReference().getRegistry();
+        final Registry registry = getCamelContextReference().getRegistry();
+        if (registry instanceof LocalBeanRepositoryAware localBeanRepositoryAware) {
+            localBeans = localBeanRepositoryAware;
         }
         try {
             RouteDefinitionHelper.forceAssignIds(getCamelContextReference(), routeDefinitions);
@@ -645,7 +644,7 @@ public class DefaultCamelContext extends SimpleCamelContext implements ModelCame
                     }
 
                     // copy parameters/bean repository to not cause side effect
-                    Map<Object, Object> params = new HashMap<>(routeDefinition.getTemplateParameters());
+                    Map<String, Object> params = new HashMap<>(routeDefinition.getTemplateParameters());
                     LocalBeanRegistry bbr
                             = (LocalBeanRegistry) routeDefinition.getRouteTemplateContext().getLocalBeanRepository();
                     LocalBeanRegistry bbrCopy = new LocalBeanRegistry();
@@ -655,10 +654,9 @@ public class DefaultCamelContext extends SimpleCamelContext implements ModelCame
                     // no side-effect from previously used values that Camel may use in its endpoint
                     // registry and elsewhere
                     if (bbr != null && !bbr.isEmpty()) {
-                        for (Map.Entry<Object, Object> param : params.entrySet()) {
+                        for (Map.Entry<String, Object> param : params.entrySet()) {
                             Object value = param.getValue();
-                            if (value instanceof String) {
-                                String oldKey = (String) value;
+                            if (value instanceof String oldKey) {
                                 boolean clash = bbr.keys().stream().anyMatch(k -> k.equals(oldKey));
                                 if (clash) {
                                     String newKey = oldKey + "-" + UUID.generateUuid();
@@ -702,7 +700,7 @@ public class DefaultCamelContext extends SimpleCamelContext implements ModelCame
                     pc.setLocalProperties(prop);
 
                     // we need to shadow the bean registry on the CamelContext with the local beans from the route template context
-                    if (localBeans != null && bbrCopy != null) {
+                    if (localBeans != null) {
                         localBeans.setLocalBeanRepository(bbrCopy);
                     }
 
@@ -786,7 +784,7 @@ public class DefaultCamelContext extends SimpleCamelContext implements ModelCame
         getValidatorRegistry().put(createValidatorKey(def), validator);
     }
 
-    private static ValueHolder<String> createValidatorKey(ValidatorDefinition def) {
+    private static ValidatorKey createValidatorKey(ValidatorDefinition def) {
         return new ValidatorKey(new DataType(def.getType()));
     }
 
@@ -801,7 +799,8 @@ public class DefaultCamelContext extends SimpleCamelContext implements ModelCame
     protected boolean removeRoute(String routeId, LoggingLevel loggingLevel) throws Exception {
         // synchronize on model first to avoid deadlock with concurrent 'addRoutes' calls:
         synchronized (model) {
-            synchronized (this) {
+            getLock().lock();
+            try {
                 boolean removed = super.removeRoute(routeId, loggingLevel);
                 if (removed) {
                     // must also remove the route definition
@@ -811,6 +810,8 @@ public class DefaultCamelContext extends SimpleCamelContext implements ModelCame
                     }
                 }
                 return removed;
+            } finally {
+                getLock().unlock();
             }
         }
     }
@@ -833,7 +834,7 @@ public class DefaultCamelContext extends SimpleCamelContext implements ModelCame
         return PreconditionHelper.included(definition, this);
     }
 
-    private static ValueHolder<String> createTransformerKey(TransformerDefinition def) {
+    private static TransformerKey createTransformerKey(TransformerDefinition def) {
         if (ObjectHelper.isNotEmpty(def.getScheme())) {
             return ObjectHelper.isNotEmpty(def.getName())
                     ? new TransformerKey(def.getScheme() + ":" + def.getName()) : new TransformerKey(def.getScheme());

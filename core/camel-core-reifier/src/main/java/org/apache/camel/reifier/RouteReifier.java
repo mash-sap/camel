@@ -16,6 +16,8 @@
  */
 package org.apache.camel.reifier;
 
+import java.io.Closeable;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -30,7 +32,9 @@ import org.apache.camel.Exchange;
 import org.apache.camel.FailedToCreateRouteException;
 import org.apache.camel.Processor;
 import org.apache.camel.Route;
+import org.apache.camel.RouteAware;
 import org.apache.camel.RuntimeCamelException;
+import org.apache.camel.Service;
 import org.apache.camel.ServiceStatus;
 import org.apache.camel.ShutdownRoute;
 import org.apache.camel.ShutdownRunningTask;
@@ -42,6 +46,7 @@ import org.apache.camel.model.RouteDefinition;
 import org.apache.camel.processor.ContractAdvice;
 import org.apache.camel.processor.RoutePipeline;
 import org.apache.camel.reifier.rest.RestBindingReifier;
+import org.apache.camel.spi.BeanRepository;
 import org.apache.camel.spi.CamelInternalProcessorAdvice;
 import org.apache.camel.spi.Contract;
 import org.apache.camel.spi.ErrorHandlerAware;
@@ -53,6 +58,8 @@ import org.apache.camel.spi.RoutePolicy;
 import org.apache.camel.spi.RoutePolicyFactory;
 import org.apache.camel.support.ExchangeHelper;
 import org.apache.camel.support.PluginHelper;
+import org.apache.camel.support.service.ServiceSupport;
+import org.apache.camel.util.IOHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -280,6 +287,10 @@ public class RouteReifier extends ProcessorReifier<RouteDefinition> {
                 // this ensures Camel can control the lifecycle of the policy
                 if (!camelContext.hasService(policy)) {
                     try {
+                        // inject route
+                        if (policy instanceof RouteAware ra) {
+                            ra.setRoute(route);
+                        }
                         camelContext.addService(policy);
                     } catch (Exception e) {
                         throw RuntimeCamelException.wrapRuntimeCamelException(e);
@@ -367,14 +378,34 @@ public class RouteReifier extends ProcessorReifier<RouteDefinition> {
             camelContext.getCamelContextExtension().addBootstrap(route::clearRouteModel);
         }
 
+        if (definition.getRouteTemplateContext() != null) {
+            // make route stop beans from the local repository (route templates / kamelets)
+            Service wrapper = new ServiceSupport() {
+                @Override
+                protected void doStop() throws Exception {
+                    close();
+                }
+
+                @Override
+                public void close() throws IOException {
+                    BeanRepository repo = definition.getRouteTemplateContext().getLocalBeanRepository();
+                    if (repo instanceof Closeable obj) {
+                        IOHelper.close(obj);
+                    }
+                    super.close();
+                }
+            };
+            route.addService(wrapper, true);
+        }
+
         return route;
     }
 
     private void prepareErrorHandlerAware(Route route, Processor errorHandler) {
         List<Processor> processors = route.filter("*");
         for (Processor p : processors) {
-            if (p instanceof ErrorHandlerAware) {
-                ((ErrorHandlerAware) p).setErrorHandler(errorHandler);
+            if (p instanceof ErrorHandlerAware errorHandlerAware) {
+                errorHandlerAware.setErrorHandler(errorHandler);
             }
         }
     }
@@ -395,6 +426,8 @@ public class RouteReifier extends ProcessorReifier<RouteDefinition> {
         routeProperties.put(Route.REST_PROPERTY, rest);
         String template = Boolean.toString(definition.isTemplate() != null && definition.isTemplate());
         routeProperties.put(Route.TEMPLATE_PROPERTY, template);
+        String kamelet = Boolean.toString(definition.isKamelet() != null && definition.isKamelet());
+        routeProperties.put(Route.KAMELET_PROPERTY, kamelet);
         if (definition.getAppliedRouteConfigurationIds() != null) {
             routeProperties.put(Route.CONFIGURATION_ID_PROPERTY,
                     String.join(",", definition.getAppliedRouteConfigurationIds()));

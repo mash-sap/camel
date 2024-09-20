@@ -29,7 +29,7 @@ import org.apache.camel.component.as2.api.AS2MessageStructure;
 import org.apache.camel.component.as2.api.AS2SignatureAlgorithm;
 import org.apache.camel.component.as2.internal.AS2ApiName;
 import org.apache.camel.impl.DefaultCamelContext;
-import org.apache.http.conn.ssl.NoopHostnameVerifier;
+import org.apache.hc.client5.http.ssl.NoopHostnameVerifier;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
@@ -48,11 +48,11 @@ public class MendelsonSslEndpointManualTest extends AbstractAS2ITSupport {
     private static final Logger LOG = LoggerFactory.getLogger(MendelsonSslEndpointManualTest.class);
     private static HostnameVerifier hostnameVerifier;
 
-    private MendelsonCertLoader mendelsonCertLoader;
-    private final Properties props = new Properties();
+    private static MendelsonCertLoader mendelsonCertLoader;
+    private static final Properties props = new Properties();
 
     @BeforeAll
-    public void setupTest() {
+    public static void setupTest() {
         InputStream is = MendelsonSslEndpointManualTest.class
                 .getClassLoader().getResourceAsStream("test-server.properties");
         try {

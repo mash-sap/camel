@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.camel.support.http;
 
 import java.util.ArrayList;
@@ -73,7 +72,7 @@ public final class HttpUtil {
      * @param      contentType the content type string
      * @return                 the charset value or null if there is nothing to extract
      */
-    @Deprecated
+    @Deprecated(since = "4.3.0")
     public static String getCharsetFromContentType(String contentType) {
         if (contentType != null) {
             // find the charset and set it to the Exchange

@@ -69,6 +69,20 @@ public class XPathExpression extends NamespaceAwareExpression {
     public XPathExpression() {
     }
 
+    protected XPathExpression(XPathExpression source) {
+        super(source);
+        this.documentType = source.documentType;
+        this.xpathFactory = source.xpathFactory;
+        this.documentTypeName = source.documentTypeName;
+        this.resultQName = source.resultQName;
+        this.saxon = source.saxon;
+        this.factoryRef = source.factoryRef;
+        this.objectModel = source.objectModel;
+        this.logNamespaces = source.logNamespaces;
+        this.threadSafety = source.threadSafety;
+        this.preCompile = source.preCompile;
+    }
+
     public XPathExpression(String expression) {
         super(expression);
     }
@@ -89,6 +103,11 @@ public class XPathExpression extends NamespaceAwareExpression {
         this.logNamespaces = builder.logNamespaces;
         this.threadSafety = builder.threadSafety;
         this.preCompile = builder.preCompile;
+    }
+
+    @Override
+    public ExpressionDefinition copyDefinition() {
+        return new XPathExpression(this);
     }
 
     @Override
@@ -265,8 +284,18 @@ public class XPathExpression extends NamespaceAwareExpression {
          * <p/>
          * The default result type is NodeSet
          */
-        public Builder resultQName(String resultTypeName) {
+        public Builder resultQName(String resultQName) {
             this.resultQName = resultQName;
+            return this;
+        }
+
+        /**
+         * Sets the class name of the result type (type from output)
+         * <p/>
+         * The default result type is NodeSet
+         */
+        public Builder resultQName(ResultQName resultQName) {
+            this.resultQName = resultQName == null ? null : resultQName.name();
             return this;
         }
 
@@ -376,5 +405,17 @@ public class XPathExpression extends NamespaceAwareExpression {
         public XPathExpression end() {
             return new XPathExpression(this);
         }
+    }
+
+    /**
+     * {@code ResultQName} defines the possible class name of the result types that can be used.
+     */
+    @XmlTransient
+    public enum ResultQName {
+        NUMBER,
+        STRING,
+        BOOLEAN,
+        NODESET,
+        NODE
     }
 }

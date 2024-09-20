@@ -99,7 +99,7 @@ public class DefaultRoute extends ServiceSupport implements Route {
     private ConsumerListener<?, ?> consumerListener;
 
     // camel-core-model
-    @Deprecated
+    @Deprecated(since = "3.17.0")
     private ErrorHandlerFactory errorHandlerFactory;
     // camel-core-model: must be concurrent as error handlers can be mutated concurrently via multicast/recipientlist EIPs
     private final ConcurrentMap<ErrorHandlerFactory, Set<NamedNode>> errorHandlers = new ConcurrentHashMap<>();
@@ -107,7 +107,8 @@ public class DefaultRoute extends ServiceSupport implements Route {
     private final Endpoint endpoint;
     private final Map<String, Object> properties = new HashMap<>();
     private final List<Service> services = new ArrayList<>();
-    private StopWatch stopWatch = new StopWatch(false);
+    private final List<Service> servicesToStop = new ArrayList<>();
+    private final StopWatch stopWatch = new StopWatch(false);
     private RouteError routeError;
     private Integer startupOrder;
     private RouteController routeController;
@@ -139,6 +140,21 @@ public class DefaultRoute extends ServiceSupport implements Route {
     @Override
     public boolean isCustomId() {
         return "true".equals(properties.get(Route.CUSTOM_ID_PROPERTY));
+    }
+
+    @Override
+    public boolean isCreatedByRestDsl() {
+        return "true".equals(properties.get(Route.REST_PROPERTY));
+    }
+
+    @Override
+    public boolean isCreatedByRouteTemplate() {
+        return "true".equals(properties.get(Route.TEMPLATE_PROPERTY));
+    }
+
+    @Override
+    public boolean isCreatedByKamelet() {
+        return "true".equals(properties.get(Route.KAMELET_PROPERTY));
     }
 
     @Override
@@ -222,6 +238,17 @@ public class DefaultRoute extends ServiceSupport implements Route {
     }
 
     @Override
+    public void addService(Service service, boolean forceStop) {
+        if (forceStop) {
+            if (!servicesToStop.contains(service)) {
+                servicesToStop.add(service);
+            }
+        } else {
+            addService(service);
+        }
+    }
+
+    @Override
     public void warmUp() {
         // noop
     }
@@ -259,6 +286,9 @@ public class DefaultRoute extends ServiceSupport implements Route {
     protected void doShutdown() throws Exception {
         // clear services when shutting down
         services.clear();
+        // shutdown forced services
+        ServiceHelper.stopAndShutdownService(servicesToStop);
+        servicesToStop.clear();
     }
 
     @Override
@@ -640,34 +670,34 @@ public class DefaultRoute extends ServiceSupport implements Route {
         consumer = endpoint.createConsumer(processor);
         if (consumer != null) {
             services.add(consumer);
-            if (consumer instanceof RouteAware) {
-                ((RouteAware) consumer).setRoute(this);
+            if (consumer instanceof RouteAware routeAware) {
+                routeAware.setRoute(this);
             }
-            if (consumer instanceof RouteIdAware) {
-                ((RouteIdAware) consumer).setRouteId(this.getId());
+            if (consumer instanceof RouteIdAware routeIdAware) {
+                routeIdAware.setRouteId(this.getId());
             }
 
-            if (consumer instanceof ResumeAware<?> && resumeStrategy != null) {
-                ResumeAdapter resumeAdapter = AdapterHelper.eval(getCamelContext(), (ResumeAware<?>) consumer, resumeStrategy);
+            if (consumer instanceof ResumeAware resumeAware && resumeStrategy != null) {
+                ResumeAdapter resumeAdapter = AdapterHelper.eval(getCamelContext(), resumeAware, resumeStrategy);
                 resumeStrategy.setAdapter(resumeAdapter);
-                ((ResumeAware) consumer).setResumeStrategy(resumeStrategy);
+                resumeAware.setResumeStrategy(resumeStrategy);
             }
 
-            if (consumer instanceof ConsumerListenerAware<?>) {
-                ((ConsumerListenerAware) consumer).setConsumerListener(consumerListener);
+            if (consumer instanceof ConsumerListenerAware consumerListenerAware) {
+                consumerListenerAware.setConsumerListener(consumerListener);
             }
         }
-        if (processor instanceof Service) {
-            services.add((Service) processor);
+        if (processor instanceof Service service) {
+            services.add(service);
         }
         for (Processor p : onCompletions.values()) {
-            if (processor instanceof Service) {
-                services.add((Service) p);
+            if (processor instanceof Service service) {
+                services.add(service);
             }
         }
         for (Processor p : onExceptions.values()) {
-            if (processor instanceof Service) {
-                services.add((Service) p);
+            if (processor instanceof Service service) {
+                services.add(service);
             }
         }
     }
@@ -679,8 +709,7 @@ public class DefaultRoute extends ServiceSupport implements Route {
 
         // we want to navigate routes to be easy, so skip the initial channel
         // and navigate to its output where it all starts from end user point of view
-        if (answer instanceof Navigate) {
-            Navigate<Processor> nav = (Navigate<Processor>) answer;
+        if (answer instanceof Navigate nav) {
             if (nav.next().size() == 1) {
                 Object first = nav.next().get(0);
                 if (first instanceof Navigate) {
@@ -705,8 +734,8 @@ public class DefaultRoute extends ServiceSupport implements Route {
         if (list != null) {
             for (Processor proc : list) {
                 String id = null;
-                if (proc instanceof IdAware) {
-                    id = ((IdAware) proc).getId();
+                if (proc instanceof IdAware idAware) {
+                    id = idAware.getId();
                 }
                 if (PatternHelper.matchPattern(id, pattern)) {
                     match.add(proc);

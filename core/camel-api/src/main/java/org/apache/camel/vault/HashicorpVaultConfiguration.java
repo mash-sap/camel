@@ -25,8 +25,6 @@ public class HashicorpVaultConfiguration extends VaultConfiguration {
 
     @Metadata(secret = true)
     private String token;
-    @Metadata(secret = true)
-    private String engine;
     @Metadata
     private String host;
     @Metadata
@@ -34,57 +32,46 @@ public class HashicorpVaultConfiguration extends VaultConfiguration {
     @Metadata
     private String scheme;
 
-    /**
-     * Token to access hashicorp vault
-     */
     public String getToken() {
         return token;
     }
 
+    /**
+     * Token to access hashicorp vault
+     */
     public void setToken(String token) {
         this.token = token;
     }
 
-    /**
-     * Engine to look at hashicorp vault
-     */
-    public String getEngine() {
-        return engine;
-    }
-
-    public void setEngine(String engine) {
-        this.engine = engine;
+    public String getHost() {
+        return host;
     }
 
     /**
      * Host to access hashicorp vault
      */
-    public String getHost() {
-        return host;
-    }
-
     public void setHost(String host) {
         this.host = host;
+    }
+
+    public String getPort() {
+        return port;
     }
 
     /**
      * Port to access hashicorp vault
      */
-    public String getPort() {
-        return port;
-    }
-
     public void setPort(String port) {
         this.port = port;
+    }
+
+    public String getScheme() {
+        return scheme;
     }
 
     /**
      * Scheme to access hashicorp vault
      */
-    public String getScheme() {
-        return scheme;
-    }
-
     public void setScheme(String scheme) {
         this.scheme = scheme;
     }

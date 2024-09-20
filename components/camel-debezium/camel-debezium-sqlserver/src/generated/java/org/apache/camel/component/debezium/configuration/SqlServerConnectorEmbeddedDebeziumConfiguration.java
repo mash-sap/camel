@@ -14,8 +14,16 @@ public class SqlServerConnectorEmbeddedDebeziumConfiguration
     private static final String LABEL_NAME = "consumer,sqlserver";
     @UriParam(label = LABEL_NAME)
     private String messageKeyColumns;
+    @UriParam(label = LABEL_NAME, defaultValue = "io.debezium.pipeline.txmetadata.DefaultTransactionMetadataFactory")
+    private String transactionMetadataFactory = "io.debezium.pipeline.txmetadata.DefaultTransactionMetadataFactory";
+    @UriParam(label = LABEL_NAME, defaultValue = "0ms", javaType = "java.time.Duration")
+    private long streamingDelayMs = 0;
     @UriParam(label = LABEL_NAME)
     private String customMetricTags;
+    @UriParam(label = LABEL_NAME, defaultValue = "10m", javaType = "java.time.Duration")
+    private int databaseQueryTimeoutMs = 600000;
+    @UriParam(label = LABEL_NAME, defaultValue = "function")
+    private String dataQueryMode = "function";
     @UriParam(label = LABEL_NAME, defaultValue = "source")
     private String signalEnabledChannels = "source";
     @UriParam(label = LABEL_NAME)
@@ -51,6 +59,8 @@ public class SqlServerConnectorEmbeddedDebeziumConfiguration
     @UriParam(label = LABEL_NAME, defaultValue = "0ms", javaType = "java.time.Duration")
     private int heartbeatIntervalMs = 0;
     @UriParam(label = LABEL_NAME, defaultValue = "false")
+    private boolean snapshotModeConfigurationBasedSnapshotOnSchemaError = false;
+    @UriParam(label = LABEL_NAME, defaultValue = "false")
     private boolean incrementalSnapshotAllowSchemaChanges = false;
     @UriParam(label = LABEL_NAME, defaultValue = "false")
     private boolean schemaHistoryInternalSkipUnparseableDdl = false;
@@ -73,6 +83,8 @@ public class SqlServerConnectorEmbeddedDebeziumConfiguration
     private String topicNamingStrategy = "io.debezium.schema.SchemaTopicNamingStrategy";
     @UriParam(label = LABEL_NAME, defaultValue = "initial")
     private String snapshotMode = "initial";
+    @UriParam(label = LABEL_NAME, defaultValue = "false")
+    private boolean snapshotModeConfigurationBasedSnapshotData = false;
     @UriParam(label = LABEL_NAME, defaultValue = "8192")
     private int maxQueueSize = 8192;
     @UriParam(label = LABEL_NAME, defaultValue = "1024")
@@ -87,6 +99,8 @@ public class SqlServerConnectorEmbeddedDebeziumConfiguration
     private boolean schemaHistoryInternalStoreOnlyCapturedTablesDdl = false;
     @UriParam(label = LABEL_NAME, defaultValue = "false")
     private boolean schemaHistoryInternalStoreOnlyCapturedDatabasesDdl = false;
+    @UriParam(label = LABEL_NAME, defaultValue = "false")
+    private boolean snapshotModeConfigurationBasedSnapshotOnDataError = false;
     @UriParam(label = LABEL_NAME)
     private String schemaHistoryInternalFileFilename;
     @UriParam(label = LABEL_NAME, defaultValue = "false")
@@ -108,8 +122,12 @@ public class SqlServerConnectorEmbeddedDebeziumConfiguration
     private boolean incrementalSnapshotOptionRecompile = false;
     @UriParam(label = LABEL_NAME)
     private String snapshotIncludeCollectionList;
+    @UriParam(label = LABEL_NAME, defaultValue = "false")
+    private boolean snapshotModeConfigurationBasedStartStream = false;
     @UriParam(label = LABEL_NAME, defaultValue = "0")
     private long maxQueueSizeInBytes = 0;
+    @UriParam(label = LABEL_NAME, defaultValue = "false")
+    private boolean snapshotModeConfigurationBasedSnapshotSchema = false;
     @UriParam(label = LABEL_NAME, defaultValue = "adaptive")
     private String timePrecisionMode = "adaptive";
     @UriParam(label = LABEL_NAME, defaultValue = "5s", javaType = "java.time.Duration")
@@ -128,10 +146,12 @@ public class SqlServerConnectorEmbeddedDebeziumConfiguration
     private int databasePort = 1433;
     @UriParam(label = LABEL_NAME)
     private String notificationSinkTopicName;
+    @UriParam(label = LABEL_NAME)
+    private String snapshotModeCustomName;
     @UriParam(label = LABEL_NAME, defaultValue = "io.debezium.storage.kafka.history.KafkaSchemaHistory")
     private String schemaHistoryInternal = "io.debezium.storage.kafka.history.KafkaSchemaHistory";
-    @UriParam(label = LABEL_NAME, defaultValue = "0")
-    private int maxIterationTransactions = 0;
+    @UriParam(label = LABEL_NAME, defaultValue = "500")
+    private int maxIterationTransactions = 500;
     @UriParam(label = LABEL_NAME)
     private String columnExcludeList;
     @UriParam(label = LABEL_NAME)
@@ -161,6 +181,29 @@ public class SqlServerConnectorEmbeddedDebeziumConfiguration
     }
 
     /**
+     * Class to make transaction context & transaction struct/schemas
+     */
+    public void setTransactionMetadataFactory(String transactionMetadataFactory) {
+        this.transactionMetadataFactory = transactionMetadataFactory;
+    }
+
+    public String getTransactionMetadataFactory() {
+        return transactionMetadataFactory;
+    }
+
+    /**
+     * A delay period after the snapshot is completed and the streaming begins,
+     * given in milliseconds. Defaults to 0 ms.
+     */
+    public void setStreamingDelayMs(long streamingDelayMs) {
+        this.streamingDelayMs = streamingDelayMs;
+    }
+
+    public long getStreamingDelayMs() {
+        return streamingDelayMs;
+    }
+
+    /**
      * The custom metric tags will accept key-value pairs to customize the MBean
      * object name which should be appended the end of regular name, each key
      * would represent a tag for the MBean object name, and the corresponding
@@ -172,6 +215,32 @@ public class SqlServerConnectorEmbeddedDebeziumConfiguration
 
     public String getCustomMetricTags() {
         return customMetricTags;
+    }
+
+    /**
+     * Time to wait for a query to execute, given in milliseconds. Defaults to
+     * 600 seconds (600,000 ms); zero means there is no limit.
+     */
+    public void setDatabaseQueryTimeoutMs(int databaseQueryTimeoutMs) {
+        this.databaseQueryTimeoutMs = databaseQueryTimeoutMs;
+    }
+
+    public int getDatabaseQueryTimeoutMs() {
+        return databaseQueryTimeoutMs;
+    }
+
+    /**
+     * Controls how the connector queries CDC data. The default is 'function',
+     * which means the data is queried by means of calling
+     * cdc.[fn_cdc_get_all_changes_#] function. The value of 'direct' makes the
+     * connector to query the change tables directly.
+     */
+    public void setDataQueryMode(String dataQueryMode) {
+        this.dataQueryMode = dataQueryMode;
+    }
+
+    public String getDataQueryMode() {
+        return dataQueryMode;
     }
 
     /**
@@ -404,6 +473,20 @@ public class SqlServerConnectorEmbeddedDebeziumConfiguration
     }
 
     /**
+     * When 'snapshot.mode' is set as configuration_based, this setting permits
+     * to specify whenever the schema should be snapshotted or not in case of
+     * error.
+     */
+    public void setSnapshotModeConfigurationBasedSnapshotOnSchemaError(
+            boolean snapshotModeConfigurationBasedSnapshotOnSchemaError) {
+        this.snapshotModeConfigurationBasedSnapshotOnSchemaError = snapshotModeConfigurationBasedSnapshotOnSchemaError;
+    }
+
+    public boolean isSnapshotModeConfigurationBasedSnapshotOnSchemaError() {
+        return snapshotModeConfigurationBasedSnapshotOnSchemaError;
+    }
+
+    /**
      * Detect schema change during an incremental snapshot and re-select a
      * current chunk to avoid locking DDLs. Note that changes to a primary key
      * are not supported and can cause incorrect results if performed during an
@@ -559,6 +642,19 @@ public class SqlServerConnectorEmbeddedDebeziumConfiguration
     }
 
     /**
+     * When 'snapshot.mode' is set as configuration_based, this setting permits
+     * to specify whenever the data should be snapshotted or not.
+     */
+    public void setSnapshotModeConfigurationBasedSnapshotData(
+            boolean snapshotModeConfigurationBasedSnapshotData) {
+        this.snapshotModeConfigurationBasedSnapshotData = snapshotModeConfigurationBasedSnapshotData;
+    }
+
+    public boolean isSnapshotModeConfigurationBasedSnapshotData() {
+        return snapshotModeConfigurationBasedSnapshotData;
+    }
+
+    /**
      * Maximum size of the queue for change events read from the database log
      * but not yet recorded or forwarded. Defaults to 8192, and should always be
      * larger than the maximum batch size.
@@ -646,6 +742,20 @@ public class SqlServerConnectorEmbeddedDebeziumConfiguration
 
     public boolean isSchemaHistoryInternalStoreOnlyCapturedDatabasesDdl() {
         return schemaHistoryInternalStoreOnlyCapturedDatabasesDdl;
+    }
+
+    /**
+     * When 'snapshot.mode' is set as configuration_based, this setting permits
+     * to specify whenever the data should be snapshotted or not in case of
+     * error.
+     */
+    public void setSnapshotModeConfigurationBasedSnapshotOnDataError(
+            boolean snapshotModeConfigurationBasedSnapshotOnDataError) {
+        this.snapshotModeConfigurationBasedSnapshotOnDataError = snapshotModeConfigurationBasedSnapshotOnDataError;
+    }
+
+    public boolean isSnapshotModeConfigurationBasedSnapshotOnDataError() {
+        return snapshotModeConfigurationBasedSnapshotOnDataError;
     }
 
     /**
@@ -790,6 +900,19 @@ public class SqlServerConnectorEmbeddedDebeziumConfiguration
     }
 
     /**
+     * When 'snapshot.mode' is set as configuration_based, this setting permits
+     * to specify whenever the stream should start or not after snapshot.
+     */
+    public void setSnapshotModeConfigurationBasedStartStream(
+            boolean snapshotModeConfigurationBasedStartStream) {
+        this.snapshotModeConfigurationBasedStartStream = snapshotModeConfigurationBasedStartStream;
+    }
+
+    public boolean isSnapshotModeConfigurationBasedStartStream() {
+        return snapshotModeConfigurationBasedStartStream;
+    }
+
+    /**
      * Maximum size of the queue in bytes for change events read from the
      * database log but not yet recorded or forwarded. Defaults to 0. Mean the
      * feature is not enabled
@@ -800,6 +923,19 @@ public class SqlServerConnectorEmbeddedDebeziumConfiguration
 
     public long getMaxQueueSizeInBytes() {
         return maxQueueSizeInBytes;
+    }
+
+    /**
+     * When 'snapshot.mode' is set as configuration_based, this setting permits
+     * to specify whenever the schema should be snapshotted or not.
+     */
+    public void setSnapshotModeConfigurationBasedSnapshotSchema(
+            boolean snapshotModeConfigurationBasedSnapshotSchema) {
+        this.snapshotModeConfigurationBasedSnapshotSchema = snapshotModeConfigurationBasedSnapshotSchema;
+    }
+
+    public boolean isSnapshotModeConfigurationBasedSnapshotSchema() {
+        return snapshotModeConfigurationBasedSnapshotSchema;
     }
 
     /**
@@ -878,18 +1014,20 @@ public class SqlServerConnectorEmbeddedDebeziumConfiguration
      * Controls which transaction isolation level is used and how long the
      * connector locks the captured tables. The default is 'repeatable_read',
      * which means that repeatable read isolation level is used. In addition,
-     * exclusive locks are taken only during schema snapshot. Using a value of
-     * 'exclusive' ensures that the connector holds the exclusive lock (and thus
-     * prevents any reads and updates) for all captured tables during the entire
-     * snapshot duration. When 'snapshot' is specified, connector runs the
-     * initial snapshot in SNAPSHOT isolation level, which guarantees snapshot
-     * consistency. In addition, neither table nor row-level locks are held.
-     * When 'read_committed' is specified, connector runs the initial snapshot
-     * in READ COMMITTED isolation level. No long-running locks are taken, so
-     * that initial snapshot does not prevent other transactions from updating
-     * table rows. Snapshot consistency is not guaranteed.In 'read_uncommitted'
-     * mode neither table nor row-level locks are acquired, but connector does
-     * not guarantee snapshot consistency.
+     * type of acquired lock during schema snapshot depends on
+     * `snapshot.locking.mode` property. Using a value of 'exclusive' ensures
+     * that the connector holds the type of lock specified with
+     * `snapshot.locking.mode` property (and thus prevents any reads and
+     * updates) for all captured tables during the entire snapshot duration.
+     * When 'snapshot' is specified, connector runs the initial snapshot in
+     * SNAPSHOT isolation level, which guarantees snapshot consistency. In
+     * addition, neither table nor row-level locks are held. When
+     * 'read_committed' is specified, connector runs the initial snapshot in
+     * READ COMMITTED isolation level. No long-running locks are taken, so that
+     * initial snapshot does not prevent other transactions from updating table
+     * rows. Snapshot consistency is not guaranteed.In 'read_uncommitted' mode
+     * neither table nor row-level locks are acquired, but connector does not
+     * guarantee snapshot consistency.
      */
     public void setSnapshotIsolationMode(String snapshotIsolationMode) {
         this.snapshotIsolationMode = snapshotIsolationMode;
@@ -932,6 +1070,20 @@ public class SqlServerConnectorEmbeddedDebeziumConfiguration
 
     public String getNotificationSinkTopicName() {
         return notificationSinkTopicName;
+    }
+
+    /**
+     * When 'snapshot.mode' is set as custom, this setting must be set to
+     * specify a the name of the custom implementation provided in the 'name()'
+     * method. The implementations must implement the 'Snapshotter' interface
+     * and is called on each app boot to determine whether to do a snapshot.
+     */
+    public void setSnapshotModeCustomName(String snapshotModeCustomName) {
+        this.snapshotModeCustomName = snapshotModeCustomName;
+    }
+
+    public String getSnapshotModeCustomName() {
+        return snapshotModeCustomName;
     }
 
     /**
@@ -1014,7 +1166,11 @@ public class SqlServerConnectorEmbeddedDebeziumConfiguration
         final Configuration.Builder configBuilder = Configuration.create();
         
         addPropertyIfNotNull(configBuilder, "message.key.columns", messageKeyColumns);
+        addPropertyIfNotNull(configBuilder, "transaction.metadata.factory", transactionMetadataFactory);
+        addPropertyIfNotNull(configBuilder, "streaming.delay.ms", streamingDelayMs);
         addPropertyIfNotNull(configBuilder, "custom.metric.tags", customMetricTags);
+        addPropertyIfNotNull(configBuilder, "database.query.timeout.ms", databaseQueryTimeoutMs);
+        addPropertyIfNotNull(configBuilder, "data.query.mode", dataQueryMode);
         addPropertyIfNotNull(configBuilder, "signal.enabled.channels", signalEnabledChannels);
         addPropertyIfNotNull(configBuilder, "database.instance", databaseInstance);
         addPropertyIfNotNull(configBuilder, "include.schema.changes", includeSchemaChanges);
@@ -1032,6 +1188,7 @@ public class SqlServerConnectorEmbeddedDebeziumConfiguration
         addPropertyIfNotNull(configBuilder, "incremental.snapshot.watermarking.strategy", incrementalSnapshotWatermarkingStrategy);
         addPropertyIfNotNull(configBuilder, "snapshot.select.statement.overrides", snapshotSelectStatementOverrides);
         addPropertyIfNotNull(configBuilder, "heartbeat.interval.ms", heartbeatIntervalMs);
+        addPropertyIfNotNull(configBuilder, "snapshot.mode.configuration.based.snapshot.on.schema.error", snapshotModeConfigurationBasedSnapshotOnSchemaError);
         addPropertyIfNotNull(configBuilder, "incremental.snapshot.allow.schema.changes", incrementalSnapshotAllowSchemaChanges);
         addPropertyIfNotNull(configBuilder, "schema.history.internal.skip.unparseable.ddl", schemaHistoryInternalSkipUnparseableDdl);
         addPropertyIfNotNull(configBuilder, "column.include.list", columnIncludeList);
@@ -1043,6 +1200,7 @@ public class SqlServerConnectorEmbeddedDebeziumConfiguration
         addPropertyIfNotNull(configBuilder, "skipped.operations", skippedOperations);
         addPropertyIfNotNull(configBuilder, "topic.naming.strategy", topicNamingStrategy);
         addPropertyIfNotNull(configBuilder, "snapshot.mode", snapshotMode);
+        addPropertyIfNotNull(configBuilder, "snapshot.mode.configuration.based.snapshot.data", snapshotModeConfigurationBasedSnapshotData);
         addPropertyIfNotNull(configBuilder, "max.queue.size", maxQueueSize);
         addPropertyIfNotNull(configBuilder, "incremental.snapshot.chunk.size", incrementalSnapshotChunkSize);
         addPropertyIfNotNull(configBuilder, "retriable.restart.connector.wait.ms", retriableRestartConnectorWaitMs);
@@ -1050,6 +1208,7 @@ public class SqlServerConnectorEmbeddedDebeziumConfiguration
         addPropertyIfNotNull(configBuilder, "provide.transaction.metadata", provideTransactionMetadata);
         addPropertyIfNotNull(configBuilder, "schema.history.internal.store.only.captured.tables.ddl", schemaHistoryInternalStoreOnlyCapturedTablesDdl);
         addPropertyIfNotNull(configBuilder, "schema.history.internal.store.only.captured.databases.ddl", schemaHistoryInternalStoreOnlyCapturedDatabasesDdl);
+        addPropertyIfNotNull(configBuilder, "snapshot.mode.configuration.based.snapshot.on.data.error", snapshotModeConfigurationBasedSnapshotOnDataError);
         addPropertyIfNotNull(configBuilder, "schema.history.internal.file.filename", schemaHistoryInternalFileFilename);
         addPropertyIfNotNull(configBuilder, "tombstones.on.delete", tombstonesOnDelete);
         addPropertyIfNotNull(configBuilder, "topic.prefix", topicPrefix);
@@ -1060,7 +1219,9 @@ public class SqlServerConnectorEmbeddedDebeziumConfiguration
         addPropertyIfNotNull(configBuilder, "table.ignore.builtin", tableIgnoreBuiltin);
         addPropertyIfNotNull(configBuilder, "incremental.snapshot.option.recompile", incrementalSnapshotOptionRecompile);
         addPropertyIfNotNull(configBuilder, "snapshot.include.collection.list", snapshotIncludeCollectionList);
+        addPropertyIfNotNull(configBuilder, "snapshot.mode.configuration.based.start.stream", snapshotModeConfigurationBasedStartStream);
         addPropertyIfNotNull(configBuilder, "max.queue.size.in.bytes", maxQueueSizeInBytes);
+        addPropertyIfNotNull(configBuilder, "snapshot.mode.configuration.based.snapshot.schema", snapshotModeConfigurationBasedSnapshotSchema);
         addPropertyIfNotNull(configBuilder, "time.precision.mode", timePrecisionMode);
         addPropertyIfNotNull(configBuilder, "signal.poll.interval.ms", signalPollIntervalMs);
         addPropertyIfNotNull(configBuilder, "post.processors", postProcessors);
@@ -1070,6 +1231,7 @@ public class SqlServerConnectorEmbeddedDebeziumConfiguration
         addPropertyIfNotNull(configBuilder, "snapshot.max.threads", snapshotMaxThreads);
         addPropertyIfNotNull(configBuilder, "database.port", databasePort);
         addPropertyIfNotNull(configBuilder, "notification.sink.topic.name", notificationSinkTopicName);
+        addPropertyIfNotNull(configBuilder, "snapshot.mode.custom.name", snapshotModeCustomName);
         addPropertyIfNotNull(configBuilder, "schema.history.internal", schemaHistoryInternal);
         addPropertyIfNotNull(configBuilder, "max.iteration.transactions", maxIterationTransactions);
         addPropertyIfNotNull(configBuilder, "column.exclude.list", columnExcludeList);

@@ -62,6 +62,18 @@ public class ChoiceDefinition extends ProcessorDefinition<ChoiceDefinition> impl
     public ChoiceDefinition() {
     }
 
+    protected ChoiceDefinition(ChoiceDefinition source) {
+        super(source);
+        this.whenClauses = ProcessorDefinitionHelper.deepCopyDefinitions(source.whenClauses);
+        this.otherwise = source.otherwise != null ? source.otherwise.copyDefinition() : null;
+        this.precondition = source.precondition;
+    }
+
+    @Override
+    public ChoiceDefinition copyDefinition() {
+        return new ChoiceDefinition(this);
+    }
+
     @Override
     public List<ProcessorDefinition<?>> getOutputs() {
         // wrap the outputs into a list where we can on the inside control the
@@ -81,10 +93,10 @@ public class ChoiceDefinition extends ProcessorDefinition<ChoiceDefinition> impl
 
             @Override
             public boolean add(ProcessorDefinition<?> def) {
-                if (def instanceof WhenDefinition) {
-                    return whenClauses.add((WhenDefinition) def);
-                } else if (def instanceof OtherwiseDefinition) {
-                    otherwise = (OtherwiseDefinition) def;
+                if (def instanceof WhenDefinition whenDefinition) {
+                    return whenClauses.add(whenDefinition);
+                } else if (def instanceof OtherwiseDefinition otherwiseDefinition) {
+                    otherwise = otherwiseDefinition;
                     return true;
                 }
                 throw new IllegalArgumentException(
@@ -105,8 +117,8 @@ public class ChoiceDefinition extends ProcessorDefinition<ChoiceDefinition> impl
             @Override
             public ProcessorDefinition<?> set(int index, ProcessorDefinition<?> element) {
                 if (index < whenClauses.size()) {
-                    if (element instanceof WhenDefinition) {
-                        return whenClauses.set(index, (WhenDefinition) element);
+                    if (element instanceof WhenDefinition whenDefinition) {
+                        return whenClauses.set(index, whenDefinition);
                     }
                     throw new IllegalArgumentException(
                             "Expected WhenDefinition but was " + ObjectHelper.classCanonicalName(element));
@@ -303,19 +315,19 @@ public class ChoiceDefinition extends ProcessorDefinition<ChoiceDefinition> impl
                 exp = exp.getExpressionType();
             }
             Predicate pre = exp.getPredicate();
-            if (pre instanceof ExpressionClause) {
-                ExpressionClause<?> clause = (ExpressionClause<?>) pre;
+            if (pre instanceof ExpressionClause clause) {
                 if (clause.getExpressionType() != null) {
                     // if using the Java DSL then the expression may have been set using the
                     // ExpressionClause which is a fancy builder to define expressions and predicates
                     // using fluent builders in the DSL. However, we need afterwards a callback to
                     // reset the expression to the expression type the ExpressionClause did build for us
                     ExpressionFactory model = clause.getExpressionType();
-                    if (model instanceof ExpressionDefinition) {
-                        when.setExpression((ExpressionDefinition) model);
+                    if (model instanceof ExpressionDefinition expressionDefinition) {
+                        when.setExpression(expressionDefinition);
                     }
                 }
             }
         }
     }
+
 }

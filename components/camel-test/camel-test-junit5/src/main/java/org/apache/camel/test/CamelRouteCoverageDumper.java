@@ -22,7 +22,6 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -113,7 +112,7 @@ public class CamelRouteCoverageDumper {
 
         // sort processors by position in route definition
         for (Map.Entry<String, List<ManagedProcessorMBean>> entry : processorsForRoute.entrySet()) {
-            Collections.sort(entry.getValue(), Comparator.comparing(ManagedProcessorMBean::getIndex));
+            entry.getValue().sort(Comparator.comparing(ManagedProcessorMBean::getIndex));
         }
 
         return processorsForRoute;
@@ -123,7 +122,7 @@ public class CamelRouteCoverageDumper {
      * Gathers test details as xml.
      */
     private String gatherTestDetailsAsXml(String testClass, String testName, long timeTaken) {
-        StringBuilder sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder(512);
         sb.append("<test>\n");
         sb.append("  <class>").append(testClass).append("</class>\n");
         sb.append("  <method>").append(testName).append("</method>\n");
@@ -137,15 +136,16 @@ public class CamelRouteCoverageDumper {
      * each route.
      */
     private void logCoverageSummary(ManagedCamelContextMBean managedCamelContext, ModelCamelContext context) throws Exception {
-        StringBuilder builder = new StringBuilder("\nCoverage summary\n");
+        StringBuilder builder = new StringBuilder(1024);
 
+        builder.append("\nCoverage summary\n");
         int routes = managedCamelContext.getTotalRoutes();
 
         long contextExchangesTotal = managedCamelContext.getExchangesTotal();
 
         List<String> uncoveredRoutes = new ArrayList<>();
 
-        StringBuilder routesSummary = new StringBuilder();
+        StringBuilder routesSummary = new StringBuilder(1024);
         routesSummary.append("\tProcessor coverage\n");
 
         MBeanServer server = context.getManagementStrategy().getManagementAgent().getMBeanServer();

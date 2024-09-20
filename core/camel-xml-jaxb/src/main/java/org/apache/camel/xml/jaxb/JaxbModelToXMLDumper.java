@@ -45,11 +45,11 @@ import org.apache.camel.CamelContextAware;
 import org.apache.camel.NamedNode;
 import org.apache.camel.TypeConversionException;
 import org.apache.camel.converter.jaxp.XmlConverter;
+import org.apache.camel.model.BeanFactoryDefinition;
 import org.apache.camel.model.RouteDefinition;
 import org.apache.camel.model.RouteTemplateDefinition;
 import org.apache.camel.model.RouteTemplatesDefinition;
 import org.apache.camel.model.RoutesDefinition;
-import org.apache.camel.model.app.RegistryBeanDefinition;
 import org.apache.camel.spi.ModelToXMLDumper;
 import org.apache.camel.spi.PropertiesComponent;
 import org.apache.camel.spi.annotations.JdkService;
@@ -84,8 +84,8 @@ public class JaxbModelToXMLDumper implements ModelToXMLDumper {
 
         // gather all namespaces from the routes or route which is stored on the
         // expression nodes
-        if (definition instanceof RouteTemplatesDefinition) {
-            List<RouteTemplateDefinition> templates = ((RouteTemplatesDefinition) definition).getRouteTemplates();
+        if (definition instanceof RouteTemplatesDefinition routeTemplatesDefinition) {
+            List<RouteTemplateDefinition> templates = routeTemplatesDefinition.getRouteTemplates();
             for (RouteTemplateDefinition route : templates) {
                 extractNamespaces(route.getRoute(), namespaces);
                 if (context.isDebugging()) {
@@ -93,15 +93,14 @@ public class JaxbModelToXMLDumper implements ModelToXMLDumper {
                 }
                 resolveEndpointDslUris(route.getRoute());
             }
-        } else if (definition instanceof RouteTemplateDefinition) {
-            RouteTemplateDefinition template = (RouteTemplateDefinition) definition;
+        } else if (definition instanceof RouteTemplateDefinition template) {
             extractNamespaces(template.getRoute(), namespaces);
             if (context.isDebugging()) {
                 extractSourceLocations(template.getRoute(), locations);
             }
             resolveEndpointDslUris(template.getRoute());
-        } else if (definition instanceof RoutesDefinition) {
-            List<RouteDefinition> routes = ((RoutesDefinition) definition).getRoutes();
+        } else if (definition instanceof RoutesDefinition routesDefinition) {
+            List<RouteDefinition> routes = routesDefinition.getRoutes();
             for (RouteDefinition route : routes) {
                 extractNamespaces(route, namespaces);
                 if (context.isDebugging()) {
@@ -109,8 +108,7 @@ public class JaxbModelToXMLDumper implements ModelToXMLDumper {
                 }
                 resolveEndpointDslUris(route);
             }
-        } else if (definition instanceof RouteDefinition) {
-            RouteDefinition route = (RouteDefinition) definition;
+        } else if (definition instanceof RouteDefinition route) {
             extractNamespaces(route, namespaces);
             if (context.isDebugging()) {
                 extractSourceLocations(route, locations);
@@ -180,8 +178,8 @@ public class JaxbModelToXMLDumper implements ModelToXMLDumper {
                     Iterator<?> it = null;
                     if (definition instanceof RouteDefinition) {
                         it = ObjectHelper.createIterator(definition);
-                    } else if (definition instanceof RoutesDefinition) {
-                        it = ObjectHelper.createIterator(((RoutesDefinition) definition).getRoutes());
+                    } else if (definition instanceof RoutesDefinition routesDefinition) {
+                        it = ObjectHelper.createIterator(routesDefinition.getRoutes());
                     }
                     while (it != null && it.hasNext()) {
                         RouteDefinition routeDefinition = (RouteDefinition) it.next();
@@ -227,9 +225,9 @@ public class JaxbModelToXMLDumper implements ModelToXMLDumper {
         StringWriter buffer = new StringWriter();
         BeanModelWriter writer = new BeanModelWriter(buffer);
 
-        List<RegistryBeanDefinition> list = new ArrayList<>();
+        List<BeanFactoryDefinition<?>> list = new ArrayList<>();
         for (Object bean : beans) {
-            if (bean instanceof RegistryBeanDefinition rb) {
+            if (bean instanceof BeanFactoryDefinition<?> rb) {
                 list.add(rb);
             }
         }
@@ -295,16 +293,16 @@ public class JaxbModelToXMLDumper implements ModelToXMLDumper {
             // noop
         }
 
-        public void writeBeans(List<RegistryBeanDefinition> beans) {
+        public void writeBeans(List<BeanFactoryDefinition<?>> beans) {
             if (beans.isEmpty()) {
                 return;
             }
-            for (RegistryBeanDefinition b : beans) {
-                doWriteRegistryBeanDefinition(b);
+            for (BeanFactoryDefinition<?> b : beans) {
+                doWriteBeanFactoryDefinition(b);
             }
         }
 
-        private void doWriteRegistryBeanDefinition(RegistryBeanDefinition b) {
+        private void doWriteBeanFactoryDefinition(BeanFactoryDefinition<?> b) {
             String type = b.getType();
             if (type.startsWith("#class:")) {
                 type = type.substring(7);
@@ -340,24 +338,20 @@ public class JaxbModelToXMLDumper implements ModelToXMLDumper {
             buffer.write(">\n");
             if (b.getConstructors() != null && !b.getConstructors().isEmpty()) {
                 buffer.write(String.format("        <constructors>%n"));
-                for (Map.Entry<Integer, Object> entry : b.getConstructors().entrySet()) {
-                    Integer idx = entry.getKey();
-                    Object value = entry.getValue();
+                b.getConstructors().forEach((idx, value) -> {
                     if (idx != null) {
                         buffer.write(String.format("            <constructor index=\"%d\" value=\"%s\"/>%n", idx, value));
                     } else {
                         buffer.write(String.format("            <constructor value=\"%s\"/>%n", value));
                     }
-                }
+                });
                 buffer.write(String.format("        </constructors>%n"));
             }
             if (b.getProperties() != null && !b.getProperties().isEmpty()) {
                 buffer.write(String.format("        <properties>%n"));
-                for (Map.Entry<String, Object> entry : b.getProperties().entrySet()) {
-                    String key = entry.getKey();
-                    Object value = entry.getValue();
+                b.getProperties().forEach((key, value) -> {
                     buffer.write(String.format("            <property key=\"%s\" value=\"%s\"/>%n", key, value));
-                }
+                });
                 buffer.write(String.format("        </properties>%n"));
             }
             buffer.write(String.format("    </bean>%n"));

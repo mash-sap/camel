@@ -56,7 +56,7 @@ import org.apache.camel.spi.RoutePolicy;
  */
 @Metadata(label = "configuration")
 @XmlRootElement(name = "route")
-@XmlType(propOrder = { "routeProperties", "input", "inputType", "outputType", "outputs" })
+@XmlType(propOrder = { "routeProperties", "errorHandler", "input", "inputType", "outputType", "outputs" })
 @XmlAccessorType(XmlAccessType.PROPERTY)
 // must use XmlAccessType.PROPERTY as there is some custom logic needed to be executed in the setter methods
 public class RouteDefinition extends OutputDefinition<RouteDefinition>
@@ -80,12 +80,14 @@ public class RouteDefinition extends OutputDefinition<RouteDefinition>
     private String shutdownRunningTask;
     private String errorHandlerRef;
     private ErrorHandlerFactory errorHandlerFactory;
+    private ErrorHandlerDefinition errorHandler;
     // keep state whether the error handler is context scoped or not
     // (will by default be context scoped of no explicit error handler
     // configured)
     private boolean contextScopedErrorHandler = true;
     private Boolean rest;
     private Boolean template;
+    private Boolean kamelet;
     private RestDefinition restDefinition;
     private RestBindingDefinition restBindingDefinition;
     private InputTypeDefinition inputType;
@@ -131,8 +133,8 @@ public class RouteDefinition extends OutputDefinition<RouteDefinition>
     /**
      * Marks the route definition as prepared.
      * <p/>
-     * This is needed if routes have been created by components such as camel-spring-xml or camel-blueprint. Usually
-     * they share logic in the camel-core-xml module which prepares the routes.
+     * This is necessary if routes have been created by components such as camel-spring-xml. Usually they share logic in
+     * the camel-core-xml module which prepares the routes.
      */
     public void markPrepared() {
         prepared.set(true);
@@ -324,8 +326,10 @@ public class RouteDefinition extends OutputDefinition<RouteDefinition>
     /**
      * Disable stream caching for this route.
      *
-     * @return the builder
+     * @return     the builder
+     * @deprecated use {@link #streamCache(String)}
      */
+    @Deprecated(since = "4.6.0")
     public RouteDefinition noStreamCaching() {
         setStreamCache("false");
         return this;
@@ -334,8 +338,10 @@ public class RouteDefinition extends OutputDefinition<RouteDefinition>
     /**
      * Enable stream caching for this route.
      *
-     * @return the builder
+     * @return     the builder
+     * @deprecated use {@link #streamCache(String)}
      */
+    @Deprecated(since = "4.6.0")
     public RouteDefinition streamCaching() {
         setStreamCache("true");
         return this;
@@ -344,10 +350,23 @@ public class RouteDefinition extends OutputDefinition<RouteDefinition>
     /**
      * Enable stream caching for this route.
      *
+     * @param      streamCache whether to use stream caching (true or false), the value can be a property placeholder
+     * @return                 the builder
+     * @deprecated             use {@link #streamCache(String)}
+     */
+    @Deprecated(since = "4.6.0")
+    public RouteDefinition streamCaching(String streamCache) {
+        setStreamCache(streamCache);
+        return this;
+    }
+
+    /**
+     * Enable or disables stream caching for this route.
+     *
      * @param  streamCache whether to use stream caching (true or false), the value can be a property placeholder
      * @return             the builder
      */
-    public RouteDefinition streamCaching(String streamCache) {
+    public RouteDefinition streamCache(String streamCache) {
         setStreamCache(streamCache);
         return this;
     }
@@ -355,8 +374,10 @@ public class RouteDefinition extends OutputDefinition<RouteDefinition>
     /**
      * Disable tracing for this route.
      *
-     * @return the builder
+     * @return     the builder
+     * @deprecated use {@link #trace(String)}
      */
+    @Deprecated(since = "4.6.0")
     public RouteDefinition noTracing() {
         setTrace("false");
         return this;
@@ -365,8 +386,10 @@ public class RouteDefinition extends OutputDefinition<RouteDefinition>
     /**
      * Enable tracing for this route.
      *
-     * @return the builder
+     * @return     the builder
+     * @deprecated use {@link #trace(String)}
      */
+    @Deprecated(since = "4.6.0")
     public RouteDefinition tracing() {
         setTrace("true");
         return this;
@@ -375,11 +398,35 @@ public class RouteDefinition extends OutputDefinition<RouteDefinition>
     /**
      * Enable tracing for this route.
      *
-     * @param  tracing whether to use tracing (true or false), the value can be a property placeholder
-     * @return         the builder
+     * @param      tracing whether to use tracing (true or false), the value can be a property placeholder
+     * @return             the builder
+     * @deprecated         use {@link #trace(String)}
      */
+    @Deprecated(since = "4.6.0")
     public RouteDefinition tracing(String tracing) {
         setTrace(tracing);
+        return this;
+    }
+
+    /**
+     * Enables or disables tracing for this route.
+     *
+     * @param  trace whether to use tracing (true or false)
+     * @return       the builder
+     */
+    public RouteDefinition trace(boolean trace) {
+        setTrace(Boolean.toString(trace));
+        return this;
+    }
+
+    /**
+     * Enables or disables tracing for this route.
+     *
+     * @param  trace whether to use tracing (true or false), the value can be a property placeholder
+     * @return       the builder
+     */
+    public RouteDefinition trace(String trace) {
+        setTrace(trace);
         return this;
     }
 
@@ -390,6 +437,17 @@ public class RouteDefinition extends OutputDefinition<RouteDefinition>
      */
     public RouteDefinition messageHistory() {
         setMessageHistory("true");
+        return this;
+    }
+
+    /**
+     * Enable message history for this route.
+     *
+     * @param  messageHistory whether to use message history (true or false)
+     * @return                the builder
+     */
+    public RouteDefinition messageHistory(boolean messageHistory) {
+        setMessageHistory(Boolean.toString(messageHistory));
         return this;
     }
 
@@ -429,8 +487,10 @@ public class RouteDefinition extends OutputDefinition<RouteDefinition>
     /**
      * Disable message history for this route.
      *
-     * @return the builder
+     * @return     the builder
+     * @deprecated use {@link #messageHistory(boolean)}
      */
+    @Deprecated(since = "4.6.0")
     public RouteDefinition noMessageHistory() {
         setMessageHistory("false");
         return this;
@@ -439,8 +499,10 @@ public class RouteDefinition extends OutputDefinition<RouteDefinition>
     /**
      * Disable delayer for this route.
      *
-     * @return the builder
+     * @return     the builder
+     * @deprecated use {@link #delayer(long)}
      */
+    @Deprecated(since = "4.6.0")
     public RouteDefinition noDelayer() {
         setDelayer("0");
         return this;
@@ -488,6 +550,7 @@ public class RouteDefinition extends OutputDefinition<RouteDefinition>
      *
      * @return the builder
      */
+    @Deprecated(since = "4.6.0")
     public RouteDefinition noAutoStartup() {
         setAutoStartup("false");
         return this;
@@ -1066,6 +1129,21 @@ public class RouteDefinition extends OutputDefinition<RouteDefinition>
         return errorHandlerRef;
     }
 
+    public ErrorHandlerDefinition getErrorHandler() {
+        return errorHandler;
+    }
+
+    /**
+     * Sets the error handler to use for this route
+     */
+    @XmlElement
+    public void setErrorHandler(ErrorHandlerDefinition errorHandler) {
+        this.errorHandler = errorHandler;
+        if (errorHandler != null) {
+            this.errorHandlerFactory = errorHandler.getErrorHandlerType();
+        }
+    }
+
     /**
      * Sets the error handler if one is not already set
      */
@@ -1152,7 +1230,7 @@ public class RouteDefinition extends OutputDefinition<RouteDefinition>
     /**
      * Is a custom error handler been set
      */
-    boolean isErrorHandlerFactorySet() {
+    public boolean isErrorHandlerFactorySet() {
         return errorHandlerFactory != null;
     }
 
@@ -1178,7 +1256,7 @@ public class RouteDefinition extends OutputDefinition<RouteDefinition>
     }
 
     /**
-     * This route is created from a route template.
+     * This route is created from a route template (or from a Kamelet).
      */
     public void setTemplate(Boolean template) {
         this.template = template;
@@ -1188,6 +1266,19 @@ public class RouteDefinition extends OutputDefinition<RouteDefinition>
     @Metadata(label = "advanced")
     public Boolean isTemplate() {
         return template;
+    }
+
+    /**
+     * This route is created from a Kamelet.
+     */
+    public void setKamelet(Boolean kamelet) {
+        this.kamelet = kamelet;
+    }
+
+    @XmlAttribute
+    @Metadata(label = "advanced")
+    public Boolean isKamelet() {
+        return kamelet;
     }
 
     public RestDefinition getRestDefinition() {

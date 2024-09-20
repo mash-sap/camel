@@ -45,7 +45,8 @@ public class TransformRoute extends CamelCommand {
     private String output;
 
     @CommandLine.Option(names = { "--format" },
-                        description = "Output format (xml or yaml)", defaultValue = "yaml")
+                        description = "Output format (xml or yaml), if only yaml files are provided, the format defaults to xml and vice versa",
+                        defaultValue = "yaml")
     String format = "yaml";
 
     @CommandLine.Option(names = { "--resolve-placeholders" }, defaultValue = "false",
@@ -67,6 +68,12 @@ public class TransformRoute extends CamelCommand {
 
     @Override
     public Integer doCall() throws Exception {
+        // Automatically transform to xml if all files are yaml
+        if (files.stream().allMatch(file -> file.endsWith(".yaml"))) {
+            format = "xml";
+        } else {
+            format = "yaml";
+        }
 
         String dump = output;
         // if no output then we want to print to console, so we need to write to a hidden file, and dump that file afterwards
@@ -81,8 +88,8 @@ public class TransformRoute extends CamelCommand {
                 main.addInitialProperty("camel.main.dumpRoutes", format);
                 main.addInitialProperty("camel.main.dumpRoutesInclude", "routes,rests,routeConfigurations,beans");
                 main.addInitialProperty("camel.main.dumpRoutesLog", "false");
-                main.addInitialProperty("camel.main.dumpRoutesResolvePlaceholders", "" + resolvePlaceholders);
-                main.addInitialProperty("camel.main.dumpRoutesUriAsParameters", "" + uriAsParameters);
+                main.addInitialProperty("camel.main.dumpRoutesResolvePlaceholders", Boolean.toString(resolvePlaceholders));
+                main.addInitialProperty("camel.main.dumpRoutesUriAsParameters", Boolean.toString(uriAsParameters));
                 main.addInitialProperty("camel.main.dumpRoutesOutput", target);
                 main.addInitialProperty("camel.jbang.transform", "true");
                 main.addInitialProperty("camel.component.properties.ignoreMissingProperty", "true");

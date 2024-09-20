@@ -37,6 +37,9 @@ public interface ManagedCamelContextMBean extends ManagedPerformanceCounterMBean
     @ManagedAttribute(description = "Camel Version")
     String getCamelVersion();
 
+    @ManagedAttribute(description = "Camel Profile")
+    String getProfile();
+
     @ManagedAttribute(description = "Camel State")
     String getState();
 
@@ -125,6 +128,18 @@ public interface ManagedCamelContextMBean extends ManagedPerformanceCounterMBean
 
     @ManagedAttribute(description = "Throughput message/second")
     String getThroughput();
+
+    @ManagedAttribute(description = "Total number of exchanges processed from remote endpoints only")
+    long getRemoteExchangesTotal();
+
+    @ManagedAttribute(description = "Completed (success) number of exchanges processed from remote endpoints only")
+    long getRemoteExchangesCompleted();
+
+    @ManagedAttribute(description = "Failed number of exchanges processed from remote endpoints only")
+    long getRemoteExchangesFailed();
+
+    @ManagedAttribute(description = "Total number of exchanges inflight from remote endpoints only")
+    long getRemoteExchangesInflight();
 
     @ManagedAttribute(description = "Whether breadcrumbs is in use")
     boolean isUseBreadcrumb();

@@ -23,7 +23,7 @@
     <parent>
         <groupId>org.apache.camel</groupId>
         <artifactId>maven-plugins</artifactId>
-        <version>4.5.0-SNAPSHOT</version>
+        <version>4.9.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>camel-package-maven-plugin</artifactId>
@@ -66,11 +66,6 @@
             <groupId>org.mvel</groupId>
             <artifactId>mvel2</artifactId>
             <version>${mvel-version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.squareup</groupId>
-            <artifactId>kotlinpoet-jvm</artifactId>
-            <version>${kotlinpoet-version}</version>
         </dependency>
 
         <dependency>
@@ -119,7 +114,7 @@
             <version>${commons-text-version}</version>
         </dependency>
 
-        <!-- roaster to create java source for Spring Boot auto configuration support -->
+        <!-- roaster to create java sources for Spring Boot autoconfiguration support -->
         <dependency>
             <groupId>org.jboss.forge.roaster</groupId>
             <artifactId>roaster-api</artifactId>
@@ -162,6 +157,13 @@
             <groupId>org.snakeyaml</groupId>
             <artifactId>snakeyaml-engine</artifactId>
             <version>${snakeyaml-engine-version}</version>
+        </dependency>
+
+        <!-- velocity -->
+        <dependency>
+            <groupId>org.apache.velocity</groupId>
+            <artifactId>velocity-engine-core</artifactId>
+            <version>${velocity-version}</version>
         </dependency>
 
         <!-- logging -->
@@ -208,6 +210,18 @@
                     </mojoDependencies>
                 </configuration>
             </plugin>
+            <plugin>
+                <groupId>org.eclipse.sisu</groupId>
+                <artifactId>sisu-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>generate-index</id>
+                        <goals>
+                            <goal>main-index</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 
@@ -241,7 +255,6 @@
                             <execution>
                                 <goals>
                                     <goal>install</goal>
-				    <!--<goal>integration-test</goal>-->
                                     <goal>verify</goal>
                                 </goals>
                             </execution>

@@ -69,6 +69,19 @@ public class ToDynamicDefinition extends NoOutputDefinition<ToDynamicDefinition>
         this.uri = uri;
     }
 
+    protected ToDynamicDefinition(ToDynamicDefinition source) {
+        super(source);
+        this.endpointProducerBuilder = source.endpointProducerBuilder;
+        this.uri = source.uri;
+        this.variableSend = source.variableSend;
+        this.variableReceive = source.variableReceive;
+        this.pattern = source.pattern;
+        this.cacheSize = source.cacheSize;
+        this.ignoreInvalidEndpoint = source.ignoreInvalidEndpoint;
+        this.allowOptimisedComponents = source.allowOptimisedComponents;
+        this.autoStartComponents = source.autoStartComponents;
+    }
+
     @Override
     public String getShortName() {
         return "toD";
@@ -314,5 +327,9 @@ public class ToDynamicDefinition extends NoOutputDefinition<ToDynamicDefinition>
 
     public void setAutoStartComponents(String autoStartComponents) {
         this.autoStartComponents = autoStartComponents;
+    }
+
+    public ToDynamicDefinition copyDefinition() {
+        return new ToDynamicDefinition(this);
     }
 }

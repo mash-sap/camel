@@ -33,8 +33,8 @@ import org.w3c.dom.NodeList;
 
 import org.xml.sax.InputSource;
 
-import io.apicurio.datamodels.models.openapi.OpenApiDocument;
-import io.apicurio.datamodels.models.openapi.OpenApiPathItem;
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.PathItem;
 import org.apache.camel.CamelContext;
 import org.apache.camel.model.rest.RestsDefinition;
 import org.apache.camel.support.PluginHelper;
@@ -42,9 +42,7 @@ import org.apache.camel.util.ObjectHelper;
 
 public class RestDslXmlGenerator extends RestDslGenerator<RestDslXmlGenerator> {
 
-    private boolean blueprint;
-
-    RestDslXmlGenerator(final OpenApiDocument document) {
+    RestDslXmlGenerator(final OpenAPI document) {
         super(document);
     }
 
@@ -53,10 +51,11 @@ public class RestDslXmlGenerator extends RestDslGenerator<RestDslXmlGenerator> {
         final String basePath = RestDslGenerator.determineBasePathFrom(this.basePath, document);
         final PathVisitor<RestsDefinition> restDslStatement = new PathVisitor<>(
                 basePath, emitter, filter,
-                destinationGenerator());
+                destinationGenerator(),
+                dtoPackageName);
 
-        for (String name : document.getPaths().getItemNames()) {
-            OpenApiPathItem item = document.getPaths().getItem(name);
+        for (String name : document.getPaths().keySet()) {
+            PathItem item = document.getPaths().get(name);
             restDslStatement.visit(name, item);
         }
 
@@ -73,10 +72,6 @@ public class RestDslXmlGenerator extends RestDslGenerator<RestDslXmlGenerator> {
         final Document document = builder.parse(new InputSource(new StringReader(xml)));
 
         final Element root = document.getDocumentElement();
-
-        if (blueprint) {
-            document.renameNode(root, "http://camel.apache.org/schema/blueprint", root.getTagName());
-        }
 
         // remove all customId attributes as we do not want them in the output
         final NodeList elements = document.getElementsByTagName("*");
@@ -121,10 +116,5 @@ public class RestDslXmlGenerator extends RestDslGenerator<RestDslXmlGenerator> {
         transformer.transform(new DOMSource(document), new StreamResult(writer));
 
         return writer.toString();
-    }
-
-    public RestDslXmlGenerator withBlueprint() {
-        blueprint = true;
-        return this;
     }
 }

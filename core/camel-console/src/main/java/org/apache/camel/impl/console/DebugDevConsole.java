@@ -39,7 +39,7 @@ import org.apache.camel.util.json.JsonArray;
 import org.apache.camel.util.json.JsonObject;
 import org.apache.camel.util.json.Jsoner;
 
-@DevConsole("debug")
+@DevConsole(name = "debug", description = "Camel route debugger")
 public class DebugDevConsole extends AbstractDevConsole {
 
     public static final String COMMAND = "command";
@@ -151,6 +151,7 @@ public class DebugDevConsole extends AbstractDevConsole {
 
         BacklogDebugger backlog = getCamelContext().hasService(BacklogDebugger.class);
         if (backlog != null) {
+            root.put("version", getCamelContext().getVersion());
             root.put("enabled", backlog.isEnabled());
             root.put("standby", backlog.isStandby());
             root.put("suspendedMode", backlog.isSuspendMode());
@@ -240,6 +241,7 @@ public class DebugDevConsole extends AbstractDevConsole {
                 jo.put("routeId", h.getRouteId());
             }
             jo.put("elapsed", h.getElapsed());
+            jo.put("acceptDebugger", h.isAcceptDebugger());
             if (h.getNode() != null) {
                 jo.put("nodeId", h.getNode().getId());
                 if (h.getNode().getLocation() != null) {

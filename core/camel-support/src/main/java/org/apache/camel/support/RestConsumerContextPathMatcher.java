@@ -39,6 +39,7 @@ import java.util.stream.Collectors;
  */
 public final class RestConsumerContextPathMatcher {
 
+    private static final Pattern CONSUMER_PATH_PARAMETER_PATTERN = Pattern.compile("([^{]*)(\\{.*?\\})([^{]*)");
     private static final Map<String, Pattern> PATH_PATTERN = new ConcurrentHashMap<>();
 
     private RestConsumerContextPathMatcher() {
@@ -89,19 +90,9 @@ public final class RestConsumerContextPathMatcher {
         }
 
         // remove starting/ending slashes
-        if (requestPath.startsWith("/")) {
-            requestPath = requestPath.substring(1);
-        }
-        if (requestPath.endsWith("/")) {
-            requestPath = requestPath.substring(0, requestPath.length() - 1);
-        }
+        requestPath = removePathSlashes(requestPath);
         // remove starting/ending slashes
-        if (consumerPath.startsWith("/")) {
-            consumerPath = consumerPath.substring(1);
-        }
-        if (consumerPath.endsWith("/")) {
-            consumerPath = consumerPath.substring(0, consumerPath.length() - 1);
-        }
+        consumerPath = removePathSlashes(consumerPath);
 
         if (matchOnUriPrefix && requestPath.toLowerCase(Locale.ENGLISH).startsWith(consumerPath.toLowerCase(Locale.ENGLISH))) {
             return true;
@@ -169,6 +160,16 @@ public final class RestConsumerContextPathMatcher {
                     .filter(c -> matchPath(requestPath, c.getConsumerPath(), c.isMatchOnUriPrefix()))
                     // sort by longest by inverting the sort by multiply with -1
                     .sorted(Comparator.comparingInt(o -> -1 * o.getConsumerPath().length())).findFirst().orElse(null);
+        }
+
+        // is there a direct match by with a different VERB, as then this call is not allowed
+        if (answer == null) {
+            for (ConsumerPath<T> entry : consumerPaths) {
+                if (matchRestPath(requestPath, entry.getConsumerPath(), false)) {
+                    // okay we have direct match but for another VERB so this call is not allowed
+                    return null;
+                }
+            }
         }
 
         if (answer != null) {
@@ -242,9 +243,14 @@ public final class RestConsumerContextPathMatcher {
      * @param consumerPath a consumer path
      */
     public static void register(String consumerPath) {
+        // Remove hyphens and underscores from parameter names
+        // as these are not supported in regex named group names
+        String regex = prepareConsumerPathRegex(consumerPath);
+
         // Convert URI template to a regex pattern
-        String regex = consumerPath
+        regex = regex
                 .replace("/", "\\/")
+                .replace("-", "\\-")
                 .replace("{", "(?<")
                 .replace("}", ">[^\\/]+)");
 
@@ -316,19 +322,9 @@ public final class RestConsumerContextPathMatcher {
         }
 
         // remove starting/ending slashes
-        if (requestPath.startsWith("/")) {
-            requestPath = requestPath.substring(1);
-        }
-        if (requestPath.endsWith("/")) {
-            requestPath = requestPath.substring(0, requestPath.length() - 1);
-        }
+        requestPath = removePathSlashes(requestPath);
         // remove starting/ending slashes
-        if (consumerPath.startsWith("/")) {
-            consumerPath = consumerPath.substring(1);
-        }
-        if (consumerPath.endsWith("/")) {
-            consumerPath = consumerPath.substring(0, consumerPath.length() - 1);
-        }
+        consumerPath = removePathSlashes(consumerPath);
 
         // split using single char / is optimized in the jdk
         String[] requestPaths = requestPath.split("/");
@@ -357,6 +353,16 @@ public final class RestConsumerContextPathMatcher {
         return true;
     }
 
+    private static String removePathSlashes(String path) {
+        if (path.startsWith("/")) {
+            path = path.substring(1);
+        }
+        if (path.endsWith("/")) {
+            path = path.substring(0, path.length() - 1);
+        }
+        return path;
+    }
+
     /**
      * Counts the number of uri template's curlyBraces in the path
      *
@@ -367,12 +373,7 @@ public final class RestConsumerContextPathMatcher {
         int curlyBraces = 0;
 
         // remove starting/ending slashes
-        if (consumerPath.startsWith("/")) {
-            consumerPath = consumerPath.substring(1);
-        }
-        if (consumerPath.endsWith("/")) {
-            consumerPath = consumerPath.substring(0, consumerPath.length() - 1);
-        }
+        consumerPath = removePathSlashes(consumerPath);
 
         String[] consumerPaths = consumerPath.split("/");
         for (String p2 : consumerPaths) {
@@ -397,6 +398,26 @@ public final class RestConsumerContextPathMatcher {
         Matcher matcher = pattern.matcher(requestPath);
 
         return matcher.matches();
+    }
+
+    /**
+     * Removes any hyphens or underscores from parameter names to create valid java regex named group names
+     *
+     * @param  consumerPath
+     * @return
+     */
+    private static String prepareConsumerPathRegex(String consumerPath) {
+        Matcher m = CONSUMER_PATH_PARAMETER_PATTERN.matcher(consumerPath);
+        StringBuilder regexBuilder = new StringBuilder(256);
+        while (m.find()) {
+            m.appendReplacement(regexBuilder, m.group(1) + m.group(2).replaceAll("[\\_\\-]", "") + m.group(3));
+        }
+        // No matches so return the original path
+        if (regexBuilder.isEmpty()) {
+            return consumerPath;
+        } else {
+            return regexBuilder.toString();
+        }
     }
 
 }

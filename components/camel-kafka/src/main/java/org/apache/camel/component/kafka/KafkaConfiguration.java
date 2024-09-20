@@ -18,6 +18,7 @@ package org.apache.camel.component.kafka;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
@@ -37,6 +38,7 @@ import org.apache.camel.spi.StateRepository;
 import org.apache.camel.spi.UriParam;
 import org.apache.camel.spi.UriParams;
 import org.apache.camel.spi.UriPath;
+import org.apache.camel.support.ResourceHelper;
 import org.apache.camel.support.jsse.CipherSuitesParameters;
 import org.apache.camel.support.jsse.KeyManagersParameters;
 import org.apache.camel.support.jsse.KeyStoreParameters;
@@ -44,6 +46,7 @@ import org.apache.camel.support.jsse.SSLContextParameters;
 import org.apache.camel.support.jsse.SecureSocketProtocolsParameters;
 import org.apache.camel.support.jsse.TrustManagersParameters;
 import org.apache.camel.util.ObjectHelper;
+import org.apache.camel.util.StringHelper;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -67,6 +70,10 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
     @UriParam(label = "common",
               description = "To use a custom HeaderFilterStrategy to filter header to and from Camel message.")
     private HeaderFilterStrategy headerFilterStrategy = new KafkaHeaderFilterStrategy();
+    @UriParam(label = "common", defaultValue = "100")
+    private Integer retryBackoffMs = 100;
+    @UriParam(label = "common", defaultValue = "1000")
+    private Integer retryBackoffMaxMs = 1000;
 
     @UriParam(label = "consumer", defaultValue = "true")
     private boolean preValidateHostAndPort = true;
@@ -157,9 +164,6 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
     @UriParam(label = "producer", defaultValue = "false")
     private boolean partitionerIgnoreKeys;
 
-    @UriParam(label = "producer", defaultValue = "100")
-    private Integer retryBackoffMs = 100;
-
     @UriParam(label = "producer")
     private ExecutorService workerPool;
     @UriParam(label = "producer", defaultValue = "10")
@@ -179,6 +183,8 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
     private String key;
     @UriParam(label = "producer")
     private Integer partitionKey;
+    @UriParam(label = "producer", defaultValue = "true")
+    private boolean useIterator = true;
     @UriParam(label = "producer", enums = "all,-1,0,1", defaultValue = "all")
     private String requestRequiredAcks = "all";
     // buffer.memory
@@ -396,6 +402,7 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
         addPropertyIfNotEmpty(props, ProducerConfig.METRICS_SAMPLE_WINDOW_MS_CONFIG, getMetricsSampleWindowMs());
         addPropertyIfNotEmpty(props, ProducerConfig.RECONNECT_BACKOFF_MS_CONFIG, getReconnectBackoffMs());
         addPropertyIfNotEmpty(props, ProducerConfig.RETRY_BACKOFF_MS_CONFIG, getRetryBackoffMs());
+        addPropertyIfNotEmpty(props, ProducerConfig.RETRY_BACKOFF_MAX_MS_CONFIG, getRetryBackoffMaxMs());
         addPropertyIfNotEmpty(props, ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, isEnableIdempotence());
         addPropertyIfNotEmpty(props, ProducerConfig.RECONNECT_BACKOFF_MAX_MS_CONFIG, getReconnectBackoffMaxMs());
         addPropertyIfNotEmpty(props, "schema.registry.url", getSchemaRegistryURL());
@@ -441,10 +448,10 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
             addPropertyIfNotEmpty(props, SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, getSslTruststoreLocation());
             addPropertyIfNotEmpty(props, SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, getSslTruststorePassword());
             addPropertyIfNotEmpty(props, SslConfigs.SSL_ENABLED_PROTOCOLS_CONFIG, getSslEnabledProtocols());
-            addPropertyIfNotEmpty(props, SslConfigs.SSL_KEYSTORE_TYPE_CONFIG, getSslKeystoreType());
+            addUpperCasePropertyIfNotEmpty(props, SslConfigs.SSL_KEYSTORE_TYPE_CONFIG, getSslKeystoreType());
             addPropertyIfNotEmpty(props, SslConfigs.SSL_PROTOCOL_CONFIG, getSslProtocol());
             addPropertyIfNotEmpty(props, SslConfigs.SSL_PROVIDER_CONFIG, getSslProvider());
-            addPropertyIfNotEmpty(props, SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG, getSslTruststoreType());
+            addUpperCasePropertyIfNotEmpty(props, SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG, getSslTruststoreType());
             addPropertyIfNotEmpty(props, SslConfigs.SSL_CIPHER_SUITES_CONFIG, getSslCipherSuites());
             String algo = getSslEndpointAlgorithm();
             if (algo != null && !algo.equals("none") && !algo.equals("false")) {
@@ -483,6 +490,7 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
         addPropertyIfNotEmpty(props, ConsumerConfig.METRICS_SAMPLE_WINDOW_MS_CONFIG, getMetricsSampleWindowMs());
         addPropertyIfNotEmpty(props, ConsumerConfig.RECONNECT_BACKOFF_MS_CONFIG, getReconnectBackoffMs());
         addPropertyIfNotEmpty(props, ConsumerConfig.RETRY_BACKOFF_MS_CONFIG, getRetryBackoffMs());
+        addPropertyIfNotEmpty(props, ConsumerConfig.RETRY_BACKOFF_MAX_MS_CONFIG, getRetryBackoffMaxMs());
         addPropertyIfNotEmpty(props, ConsumerConfig.RECONNECT_BACKOFF_MAX_MS_CONFIG, getReconnectBackoffMaxMs());
         addPropertyIfNotEmpty(props, ConsumerConfig.ISOLATION_LEVEL_CONFIG, getIsolationLevel());
         addPropertyIfNotEmpty(props, "schema.registry.url", getSchemaRegistryURL());
@@ -529,10 +537,10 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
             addPropertyIfNotEmpty(props, SslConfigs.SSL_KEYMANAGER_ALGORITHM_CONFIG, getSslKeymanagerAlgorithm());
             addPropertyIfNotEmpty(props, SslConfigs.SSL_TRUSTMANAGER_ALGORITHM_CONFIG, getSslTrustmanagerAlgorithm());
             addPropertyIfNotEmpty(props, SslConfigs.SSL_ENABLED_PROTOCOLS_CONFIG, getSslEnabledProtocols());
-            addPropertyIfNotEmpty(props, SslConfigs.SSL_KEYSTORE_TYPE_CONFIG, getSslKeystoreType());
+            addUpperCasePropertyIfNotEmpty(props, SslConfigs.SSL_KEYSTORE_TYPE_CONFIG, getSslKeystoreType());
             addPropertyIfNotEmpty(props, SslConfigs.SSL_PROTOCOL_CONFIG, getSslProtocol());
             addPropertyIfNotEmpty(props, SslConfigs.SSL_PROVIDER_CONFIG, getSslProvider());
-            addPropertyIfNotEmpty(props, SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG, getSslTruststoreType());
+            addUpperCasePropertyIfNotEmpty(props, SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG, getSslTruststoreType());
             addPropertyIfNotEmpty(props, ProducerConfig.SEND_BUFFER_CONFIG, getSendBufferBytes());
         }
     }
@@ -564,8 +572,13 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
             addPropertyIfNotNull(props, SslConfigs.SSL_KEY_PASSWORD_CONFIG, keyManagers.getKeyPassword());
             KeyStoreParameters keyStore = keyManagers.getKeyStore();
             if (keyStore != null) {
-                addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_TYPE_CONFIG, keyStore.getType());
-                addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, keyStore.getResource());
+                // kakfa loads the resource itself and you cannot have a prefix
+                String location = keyStore.getResource();
+                if (ResourceHelper.hasScheme(location)) {
+                    location = StringHelper.after(location, ":");
+                }
+                addUpperCasePropertyIfNotEmpty(props, SslConfigs.SSL_KEYSTORE_TYPE_CONFIG, keyStore.getType());
+                addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG, location);
                 addPropertyIfNotNull(props, SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG, keyStore.getPassword());
             }
         }
@@ -575,8 +588,13 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
             addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTMANAGER_ALGORITHM_CONFIG, trustManagers.getAlgorithm());
             KeyStoreParameters keyStore = trustManagers.getKeyStore();
             if (keyStore != null) {
+                // kakfa loads the resource itself and you cannot have a prefix
+                String location = keyStore.getResource();
+                if (ResourceHelper.hasScheme(location)) {
+                    location = StringHelper.after(location, ":");
+                }
                 addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_TYPE_CONFIG, keyStore.getType());
-                addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, keyStore.getResource());
+                addPropertyIfNotNull(props, SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG, location);
                 addPropertyIfNotEmpty(props, SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG, keyStore.getPassword());
             }
         }
@@ -604,6 +622,12 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
         if (ObjectHelper.isNotEmpty(value)) {
             // value should be as-is
             props.put(key, value);
+        }
+    }
+
+    private static <T> void addUpperCasePropertyIfNotEmpty(Properties props, String key, T value) {
+        if (ObjectHelper.isNotEmpty(value)) {
+            props.put(key, String.valueOf(value).toUpperCase(Locale.ROOT));
         }
     }
 
@@ -817,7 +841,7 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
     }
 
     /**
-     * The maximum amount of data the server should return for a fetch request This is not an absolute maximum, if the
+     * The maximum amount of data the server should return for a fetch request. This is not an absolute maximum, if the
      * first message in the first non-empty partition of the fetch is larger than this value, the message will still be
      * returned to ensure that the consumer can make progress. The maximum message size accepted by the broker is
      * defined via message.max.bytes (broker config) or max.message.bytes (topic config). Note that the consumer
@@ -836,8 +860,8 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
     }
 
     /**
-     * The maximum amount of time the server will block before answering the fetch request if there isn't sufficient
-     * data to immediately satisfy fetch.min.bytes
+     * The maximum amount of time the server will block before answering the fetch request if there isn't enough data to
+     * immediately satisfy fetch.min.bytes
      */
     public void setFetchWaitMaxMs(Integer fetchWaitMaxMs) {
         this.fetchWaitMaxMs = fetchWaitMaxMs;
@@ -933,12 +957,28 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
     }
 
     /**
-     * Before each retry, the producer refreshes the metadata of relevant topics to see if a new leader has been
-     * elected. Since the leader election takes a bit of time, this property specifies the amount of time that the
-     * producer waits before refreshing the metadata.
+     * The amount of time to wait before attempting to retry a failed request to a given topic partition. This avoids
+     * repeatedly sending requests in a tight loop under some failure scenarios. This value is the initial backoff value
+     * and will increase exponentially for each failed request, up to the retry.backoff.max.ms value.
      */
     public void setRetryBackoffMs(Integer retryBackoffMs) {
         this.retryBackoffMs = retryBackoffMs;
+    }
+
+    public Integer getRetryBackoffMaxMs() {
+        return retryBackoffMaxMs;
+    }
+
+    /**
+     * The maximum amount of time in milliseconds to wait when retrying a request to the broker that has repeatedly
+     * failed. If provided, the backoff per client will increase exponentially for each failed request, up to this
+     * maximum. To prevent all clients from being synchronized upon retry, a randomized jitter with a factor of 0.2 will
+     * be applied to the backoff, resulting in the backoff falling within a range between 20% below and 20% above the
+     * computed value. If retry.backoff.ms is set to be higher than retry.backoff.max.ms, then retry.backoff.max.ms will
+     * be used as a constant backoff from the beginning without any exponential increase
+     */
+    public void setRetryBackoffMaxMs(Integer retryBackoffMaxMs) {
+        this.retryBackoffMaxMs = retryBackoffMaxMs;
     }
 
     public Integer getSendBufferBytes() {
@@ -1066,7 +1106,7 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
      * later rules in the list are ignored. By default, principal names of the form {username}/{hostname}@{REALM} are
      * mapped to {username}. For more details on the format, please see the Security Authorization and ACLs
      * documentation (at the Apache Kafka project website).
-     * <p/>
+     *
      * Multiple values can be separated by comma
      */
     public void setKerberosPrincipalToLocalRules(String kerberosPrincipalToLocalRules) {
@@ -1347,6 +1387,18 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
         this.partitionKey = partitionKey;
     }
 
+    public boolean isUseIterator() {
+        return useIterator;
+    }
+
+    /**
+     * Sets whether sending to kafka should send the message body as a single record, or use a java.util.Iterator to
+     * send multiple records to kafka (if the message body can be iterated).
+     */
+    public void setUseIterator(boolean useIterator) {
+        this.useIterator = useIterator;
+    }
+
     public String getRequestRequiredAcks() {
         return requestRequiredAcks;
     }
@@ -1386,8 +1438,8 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
      * idempotence is not explicitly enabled, idempotence is disabled.
      *
      * Allowing retries while setting enable.idempotence to false and max.in.flight.requests.per.connection to 1 will
-     * potentially change the ordering of records because if two batches are sent to a single partition, and the first
-     * fails and is retried but the second succeeds, then the records in the second batch may appear first.
+     * potentially change the ordering of records, because if two batches are sent to a single partition, and the first
+     * fails and is retried but the second succeeds; then the records in the second batch may appear first.
      */
     public void setRetries(Integer retries) {
         this.retries = retries;
@@ -1443,7 +1495,7 @@ public class KafkaConfiguration implements Cloneable, HeaderFilterStrategyAware 
      * The producer groups together any records that arrive in between request transmissions into a single, batched,
      * request. Normally, this occurs only under load when records arrive faster than they can be sent out. However, in
      * some circumstances, the client may want to reduce the number of requests even under a moderate load. This setting
-     * accomplishes this by adding a small amount of artificial delay. That is, rather than immediately sending out a
+     * achieves this by adding a small amount of artificial delay. That is, rather than immediately sending out a
      * record, the producer will wait for up to the given delay to allow other records to be sent so that they can be
      * batched together. This can be thought of as analogous to Nagle's algorithm in TCP. This setting gives the upper
      * bound on the delay for batching: once we get batch.size worth of records for a partition, it will be sent

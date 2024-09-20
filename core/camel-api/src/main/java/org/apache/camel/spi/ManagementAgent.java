@@ -200,16 +200,44 @@ public interface ManagementAgent extends Service {
     void setRegisterNewRoutes(Boolean registerNewRoutes);
 
     /**
-     * Whether to remove detected sensitive information (such as passwords) from MBean names and attributes.
+     * Whether to register mbeans for routes created by a Kamelet
      * <p/>
      * This option is default <tt>false</tt>.
+     */
+    Boolean getRegisterRoutesCreateByKamelet();
+
+    /**
+     * Whether to register mbeans for routes created by a Kamelet
+     * <p/>
+     * This option is default <tt>false</tt>.
+     */
+    void setRegisterRoutesCreateByKamelet(Boolean registerRoutesCreateByKamelet);
+
+    /**
+     * Whether to register mbeans for routes created by a route templates (not Kamelets)
+     * <p/>
+     * This option is default <tt>true</tt>.
+     */
+    Boolean getRegisterRoutesCreateByTemplate();
+
+    /**
+     * Whether to register mbeans for routes created by a route templates (not Kamelets)
+     * <p/>
+     * This option is default <tt>true</tt>.
+     */
+    void setRegisterRoutesCreateByTemplate(Boolean registerRoutesCreateByTemplate);
+
+    /**
+     * Whether to remove detected sensitive information (such as passwords) from MBean names and attributes.
+     * <p/>
+     * This option is default <tt>true</tt>.
      */
     Boolean getMask();
 
     /**
      * Whether to remove detected sensitive information (such as passwords) from MBean names and attributes.
      * <p/>
-     * This option is default <tt>false</tt>.
+     * This option is default <tt>true</tt>.
      */
     void setMask(Boolean sanitize);
 

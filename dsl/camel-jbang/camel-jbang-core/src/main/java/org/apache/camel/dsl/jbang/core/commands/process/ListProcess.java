@@ -19,6 +19,7 @@ package org.apache.camel.dsl.jbang.core.commands.process;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import com.github.freva.asciitable.AsciiTable;
 import com.github.freva.asciitable.Column;
@@ -78,6 +79,24 @@ public class ListProcess extends ProcessWatchCommand {
                         } else {
                             row.ready = "0/1";
                         }
+                        Map<String, ?> stats = context.getMap("statistics");
+                        if (stats != null) {
+                            row.total = stats.get("exchangesTotal").toString();
+                            Object num = stats.get("remoteExchangesTotal");
+                            if (num != null) {
+                                row.totalRemote = num.toString();
+                            }
+                            row.failed = stats.get("exchangesFailed").toString();
+                            num = stats.get("remoteExchangesFailed");
+                            if (num != null) {
+                                row.failedRemote = num.toString();
+                            }
+                            row.inflight = stats.get("exchangesInflight").toString();
+                            num = stats.get("remoteExchangesInflight");
+                            if (num != null) {
+                                row.inflightRemote = num.toString();
+                            }
+                        }
                         rows.add(row);
                     }
                 });
@@ -97,11 +116,40 @@ public class ListProcess extends ProcessWatchCommand {
                         new Column().header("READY").dataAlign(HorizontalAlign.CENTER).with(r -> r.ready),
                         new Column().header("STATUS").headerAlign(HorizontalAlign.CENTER)
                                 .with(r -> extractState(r.state)),
-                        new Column().header("AGE").headerAlign(HorizontalAlign.CENTER).with(r -> r.ago))));
+                        new Column().header("AGE").headerAlign(HorizontalAlign.CENTER).with(r -> r.ago),
+                        new Column().header("TOTAL").with(this::getTotal),
+                        new Column().header("REMOTE").with(this::getTotalRemote),
+                        new Column().header("FAIL").with(this::getFailed),
+                        new Column().header("INFLIGHT").with(this::getInflight))));
             }
         }
 
         return 0;
+    }
+
+    private String getTotal(Row r) {
+        return r.total;
+    }
+
+    private String getTotalRemote(Row r) {
+        if (r.totalRemote != null) {
+            return r.totalRemote;
+        }
+        return "";
+    }
+
+    private String getFailed(Row r) {
+        if (r.failedRemote != null) {
+            return r.failedRemote + "/" + r.failed;
+        }
+        return r.failed;
+    }
+
+    private String getInflight(Row r) {
+        if (r.inflightRemote != null) {
+            return r.inflightRemote + "/" + r.inflight;
+        }
+        return r.inflight;
     }
 
     protected int sortRow(Row o1, Row o2) {
@@ -130,6 +178,12 @@ public class ListProcess extends ProcessWatchCommand {
         int state;
         String ago;
         long uptime;
+        String total;
+        String totalRemote;
+        String failed;
+        String failedRemote;
+        String inflight;
+        String inflightRemote;
     }
 
 }

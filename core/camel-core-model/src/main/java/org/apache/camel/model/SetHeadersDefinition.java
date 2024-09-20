@@ -16,6 +16,7 @@
  */
 package org.apache.camel.model;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -32,18 +33,30 @@ import org.apache.camel.builder.ExpressionBuilder;
 import org.apache.camel.spi.Metadata;
 
 /**
- * Allows to set multiple headers on the message at the same time.
+ * Allows setting multiple headers on the message at the same time.
  */
 @Metadata(label = "eip,transformation")
 @XmlRootElement(name = "setHeaders")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class SetHeadersDefinition extends ProcessorDefinition<SetHeadersDefinition> {
 
-    /** This is provided to support XML and YAML DSL */
+    /**
+     * This is provided to support XML and YAML DSL
+     */
     @XmlElementRef(name = "headers")
     private List<SetHeaderDefinition> headers = new java.util.ArrayList<>();
 
     public SetHeadersDefinition() {
+    }
+
+    protected SetHeadersDefinition(SetHeadersDefinition source) {
+        super(source);
+        this.headers = ProcessorDefinitionHelper.deepCopyDefinitions(source.headers);
+    }
+
+    @Override
+    public SetHeadersDefinition copyDefinition() {
+        return new SetHeadersDefinition(this);
     }
 
     /**
@@ -80,7 +93,6 @@ public class SetHeadersDefinition extends ProcessorDefinition<SetHeadersDefiniti
         for (Entry<?, ?> entry : headerMap.entrySet()) {
             addHeader(entry.getKey(), entry.getValue());
         }
-
     }
 
     public List<SetHeaderDefinition> getHeaders() {

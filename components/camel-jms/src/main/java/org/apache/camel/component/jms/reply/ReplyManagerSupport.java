@@ -17,10 +17,9 @@
 package org.apache.camel.component.jms.reply;
 
 import java.time.Duration;
-import java.util.concurrent.CountDownLatch;
+import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 
 import jakarta.jms.Destination;
 import jakarta.jms.JMSException;
@@ -58,10 +57,8 @@ public abstract class ReplyManagerSupport extends ServiceSupport implements Repl
     protected ScheduledExecutorService scheduledExecutorService;
     protected ExecutorService executorService;
     protected JmsEndpoint endpoint;
-    protected Destination replyTo;
+    protected volatile Destination replyTo;
     protected AbstractMessageListenerContainer listenerContainer;
-    protected final CountDownLatch replyToLatch = new CountDownLatch(1);
-    protected final long replyToTimeout = 10000;
     protected CorrelationTimeoutMap correlation;
     protected String correlationProperty;
 
@@ -86,10 +83,8 @@ public abstract class ReplyManagerSupport extends ServiceSupport implements Repl
 
     @Override
     public void setReplyTo(Destination replyTo) {
-        log.trace("ReplyTo destination: {}", replyTo);
+        log.debug("ReplyTo destination: {}", replyTo);
         this.replyTo = replyTo;
-        // trigger latch as the reply to has been resolved and set
-        replyToLatch.countDown();
     }
 
     @Override
@@ -102,19 +97,23 @@ public abstract class ReplyManagerSupport extends ServiceSupport implements Repl
         if (replyTo != null) {
             return replyTo;
         }
-        try {
-            // the reply to destination has to be resolved using a DestinationResolver using
-            // the MessageListenerContainer which occurs asynchronously so we have to wait
-            // for that to happen before we can retrieve the reply to destination to be used
-            log.trace("Waiting for replyTo to be set");
-            boolean done = replyToLatch.await(replyToTimeout, TimeUnit.MILLISECONDS);
-            if (!done) {
-                log.warn("ReplyTo destination was not set and timeout occurred");
-            } else {
-                log.trace("Waiting for replyTo to be set done");
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        // the reply to destination has to be resolved using a DestinationResolver using
+        // the MessageListenerContainer which occurs asynchronously so we have to wait
+        // for that to happen before we can retrieve the reply to destination to be used
+        long interval = endpoint.getConfiguration().getWaitForTemporaryReplyToToBeUpdatedThreadSleepingTime();
+        int max = endpoint.getConfiguration().getWaitForTemporaryReplyToToBeUpdatedCounter();
+        log.trace("Waiting for replyTo destination to be ready (timeout: {} millis)", interval * max);
+        ForegroundTask task = Tasks.foregroundTask().withBudget(Budgets.iterationBudget()
+                .withMaxIterations(max)
+                .withInterval(Duration.ofMillis(interval))
+                .build())
+                .build();
+        boolean done = task.run(() -> {
+            log.trace("Waiting for replyTo to be ready: {}", replyTo != null);
+            return replyTo != null;
+        });
+        if (!done) {
+            log.warn("ReplyTo destination was not ready and timeout ({} millis) occurred", interval * max);
         }
         return replyTo;
     }
@@ -201,11 +200,11 @@ public abstract class ReplyManagerSupport extends ServiceSupport implements Repl
                         response.setHeader(JmsConstants.JMS_DESTINATION_NAME_PRODUCED, to);
                     }
 
-                    if (endpoint.isTransferException() && body instanceof Exception) {
+                    if (endpoint.isTransferException() && body instanceof Exception exception) {
                         log.debug("Reply was an Exception. Setting the Exception on the Exchange: {}", body);
                         // we got an exception back and endpoint was configured to transfer exception
                         // therefore set response as exception
-                        exchange.setException((Exception) body);
+                        exchange.setException(exception);
                     } else {
                         log.debug("Reply received. OUT message body set to reply payload: {}", body);
                     }
@@ -230,13 +229,13 @@ public abstract class ReplyManagerSupport extends ServiceSupport implements Repl
 
     /**
      * <b>IMPORTANT:</b> This logic is only being used due to high performance in-memory only testing using InOut over
-     * JMS. Its unlikely to happen in a real life situation with communication to a remote broker, which always will be
-     * slower to send back reply, before Camel had a chance to update it's internal correlation map.
+     * JMS. It is unlikely to happen in a real life situation with communication to a remote broker, which always will
+     * be slower to send back reply, before Camel had a chance to update the internal correlation map.
      */
     protected ReplyHandler waitForProvisionCorrelationToBeUpdated(String correlationID, Message message) {
         // race condition, when using messageID as correlationID then we store a provisional correlation id
         // at first, which gets updated with the JMSMessageID after the message has been sent. And in the unlikely
-        // event that the reply comes back really really fast, and the correlation map hasn't yet been updated
+        // event that the reply comes back really fast, and the correlation map hasn't yet been updated
         // from the provisional id to the JMSMessageID. If so we have to wait a bit and lookup again.
         if (log.isWarnEnabled()) {
             log.warn("Early reply received with correlationID [{}] -> {}", correlationID, message);
@@ -250,13 +249,12 @@ public abstract class ReplyManagerSupport extends ServiceSupport implements Repl
                 .build())
                 .build();
 
-        return task.run(() -> getReplyHandler(correlationID), answer -> answer != null).orElse(null);
+        return task.run(() -> getReplyHandler(correlationID), Objects::nonNull).orElse(null);
     }
 
     private ReplyHandler getReplyHandler(String correlationID) {
-        log.trace("Early reply not found handler. Waiting a bit longer.");
-
-        return correlation.get(correlationID);
+        log.trace("Early reply not found. Waiting a bit longer.");
+        return correlation.remove(correlationID); // get and remove
     }
 
     @Override

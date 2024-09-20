@@ -27,9 +27,8 @@ import java.util.StringJoiner;
 import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.binder.MeterBinder;
-import io.micrometer.prometheus.PrometheusConfig;
-import io.micrometer.prometheus.PrometheusMeterRegistry;
-import io.prometheus.client.exporter.common.TextFormat;
+import io.micrometer.prometheusmetrics.PrometheusConfig;
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import io.vertx.core.Handler;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.ext.web.Route;
@@ -58,6 +57,7 @@ import org.apache.camel.spi.ManagementStrategy;
 import org.apache.camel.spi.Metadata;
 import org.apache.camel.spi.Registry;
 import org.apache.camel.spi.annotations.JdkService;
+import org.apache.camel.support.CamelContextHelper;
 import org.apache.camel.support.SimpleEventNotifierSupport;
 import org.apache.camel.support.service.ServiceSupport;
 import org.apache.camel.util.IOHelper;
@@ -72,6 +72,9 @@ public class MicrometerPrometheus extends ServiceSupport implements CamelMetrics
 
     private static final Logger LOG = LoggerFactory.getLogger(MicrometerPrometheus.class);
 
+    private static final String CONTENT_TYPE_004 = "text/plain; version=0.0.4; charset=utf-8";
+    private static final String CONTENT_TYPE_100 = "application/openmetrics-text; version=1.0.0; charset=utf-8";
+
     private MainHttpServer server;
     private VertxPlatformHttpRouter router;
     private PlatformHttpComponent platformHttpComponent;
@@ -84,6 +87,8 @@ public class MicrometerPrometheus extends ServiceSupport implements CamelMetrics
     private String namingStrategy;
     @Metadata(defaultValue = "true")
     private boolean enableRoutePolicy = true;
+    @Metadata(defaultValue = "all", enums = "all,route,context")
+    private String routePolicyLevel = "all";
     @Metadata(defaultValue = "false")
     private boolean enableMessageHistory;
     @Metadata(defaultValue = "true")
@@ -129,6 +134,17 @@ public class MicrometerPrometheus extends ServiceSupport implements CamelMetrics
      */
     public void setEnableRoutePolicy(boolean enableRoutePolicy) {
         this.enableRoutePolicy = enableRoutePolicy;
+    }
+
+    public String getRoutePolicyLevel() {
+        return routePolicyLevel;
+    }
+
+    /**
+     * Sets the level of information to capture. all = both context and routes.
+     */
+    public void setRoutePolicyLevel(String routePolicyLevel) {
+        this.routePolicyLevel = routePolicyLevel;
     }
 
     public boolean isEnableMessageHistory() {
@@ -240,7 +256,19 @@ public class MicrometerPrometheus extends ServiceSupport implements CamelMetrics
             if ("legacy".equalsIgnoreCase(namingStrategy)) {
                 factory.setNamingStrategy(MicrometerRoutePolicyNamingStrategy.LEGACY);
             }
+            if ("all".equalsIgnoreCase(routePolicyLevel)) {
+                factory.getPolicyConfiguration().setContextEnabled(true);
+                factory.getPolicyConfiguration().setRouteEnabled(true);
+            } else if ("context".equalsIgnoreCase(routePolicyLevel)) {
+                factory.getPolicyConfiguration().setContextEnabled(true);
+                factory.getPolicyConfiguration().setRouteEnabled(false);
+            } else {
+                factory.getPolicyConfiguration().setContextEnabled(false);
+                factory.getPolicyConfiguration().setRouteEnabled(true);
+            }
             factory.setMeterRegistry(meterRegistry);
+            // ensure factory will be started and stopped
+            camelContext.addService(factory);
             camelContext.addRoutePolicyFactory(factory);
         }
 
@@ -320,7 +348,7 @@ public class MicrometerPrometheus extends ServiceSupport implements CamelMetrics
         super.doStart();
 
         server = camelContext.hasService(MainHttpServer.class);
-        router = VertxPlatformHttpRouter.lookup(camelContext);
+        router = CamelContextHelper.lookup(camelContext, "platform-http-router", VertxPlatformHttpRouter.class);
         platformHttpComponent = camelContext.getComponent("platform-http", PlatformHttpComponent.class);
 
         if (server != null && server.isMetricsEnabled() && router != null && platformHttpComponent != null) {
@@ -363,7 +391,7 @@ public class MicrometerPrometheus extends ServiceSupport implements CamelMetrics
         metrics.method(HttpMethod.GET);
 
         final String format
-                = "0.0.4".equals(textFormatVersion) ? TextFormat.CONTENT_TYPE_004 : TextFormat.CONTENT_TYPE_OPENMETRICS_100;
+                = "0.0.4".equals(textFormatVersion) ? CONTENT_TYPE_004 : CONTENT_TYPE_100;
         metrics.produces(format);
 
         Handler<RoutingContext> handler = new Handler<RoutingContext>() {
@@ -373,7 +401,7 @@ public class MicrometerPrometheus extends ServiceSupport implements CamelMetrics
                 // the client may ask for version 1.0.0 via accept header
                 String ah = ctx.request().getHeader("Accept");
                 if (ah != null && ah.contains("application/openmetrics-text")) {
-                    ct = TextFormat.chooseContentType(ah);
+                    ct = CONTENT_TYPE_100;
                 }
 
                 ctx.response().putHeader("Content-Type", ct);
@@ -385,6 +413,7 @@ public class MicrometerPrometheus extends ServiceSupport implements CamelMetrics
         // use blocking handler as the task can take longer time to complete
         metrics.handler(new BlockingHandlerDecorator(handler, true));
 
-        platformHttpComponent.addHttpEndpoint("/q/metrics", null, null);
+        platformHttpComponent.addHttpEndpoint("/q/metrics", "GET",
+                null, format, null);
     }
 }

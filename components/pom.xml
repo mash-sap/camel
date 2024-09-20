@@ -23,7 +23,7 @@
     <parent>
         <groupId>org.apache.camel</groupId>
         <artifactId>camel-parent</artifactId>
-        <version>4.5.0-SNAPSHOT</version>
+        <version>4.9.0-SNAPSHOT</version>
         <relativePath>../parent</relativePath>
     </parent>
 
@@ -75,6 +75,8 @@
 
         <!-- regular modules in alphabetic order -->
         <module>camel-activemq</module>
+        <module>camel-activemq6</module>
+        <module>camel-ai</module>
         <module>camel-amqp</module>
         <module>camel-arangodb</module>
         <module>camel-as2</module>
@@ -97,7 +99,6 @@
         <module>camel-caffeine</module>
         <module>camel-cassandraql</module>
         <module>camel-cbor</module>
-        <module>camel-chatscript</module>
         <module>camel-chunk</module>
         <module>camel-cloudevents</module>
         <module>camel-cm-sms</module>
@@ -107,6 +108,7 @@
         <module>camel-couchbase</module>
         <module>camel-couchdb</module>
         <module>camel-crypto</module>
+        <module>camel-crypto-pgp</module>
         <module>camel-csimple-joor</module>
         <module>camel-csv</module>
         <module>camel-datasonnet</module>
@@ -115,7 +117,6 @@
         <module>camel-dhis2</module>
         <module>camel-digitalocean</module>
         <module>camel-disruptor</module>
-        <module>camel-djl</module>
         <module>camel-dns</module>
         <module>camel-docker</module>
         <module>camel-drill</module>
@@ -243,7 +244,6 @@
         <module>camel-pubnub</module>
         <module>camel-pulsar</module>
         <module>camel-python</module>
-        <module>camel-qdrant</module>
         <module>camel-quartz</module>
         <module>camel-quickfix</module>
         <module>camel-reactive-executor-tomcat</module>
@@ -270,10 +270,12 @@
         <module>camel-sjms</module>
         <module>camel-slack</module>
         <module>camel-smb</module>
+        <module>camel-smooks</module>
         <module>camel-smpp</module>
         <module>camel-snakeyaml</module>
         <module>camel-snmp</module>
         <module>camel-soap</module>
+        <module>camel-solr</module>        
         <module>camel-splunk</module>
         <module>camel-splunk-hec</module>
         <module>camel-spring-batch</module>
@@ -292,9 +294,11 @@
         <module>camel-stitch</module>
         <module>camel-swift</module>
         <module>camel-openapi-java</module>
+        <module>camel-openapi-validator</module>
         <module>camel-opensearch</module>
         <module>camel-optaplanner</module>
         <module>camel-syslog</module>
+        <module>camel-tahu</module>
         <module>camel-tarfile</module>
         <module>camel-telegram</module>
         <module>camel-threadpoolfactory-vertx</module>
@@ -525,11 +529,17 @@
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-failsafe-plugin</artifactId>
                         <configuration>
-                            <reuseForks>true</reuseForks>
+                            <argLine>${camel.failsafe.fork.vmargs}</argLine>
+                            <reuseForks>${camel.failsafe.reuseForks}</reuseForks>
                             <forkedProcessTimeoutInSeconds>${camel.failsafe.forkTimeout}</forkedProcessTimeoutInSeconds>
                             <redirectTestOutputToFile>false</redirectTestOutputToFile>
                             <systemPropertyVariables>
                                 <visibleassertions.silence>true</visibleassertions.silence>
+                                <junit.jupiter.execution.parallel.enabled>${camel.failsafe.parallel}</junit.jupiter.execution.parallel.enabled>
+                                <junit.jupiter.execution.parallel.mode.default>same_thread</junit.jupiter.execution.parallel.mode.default>
+                                <junit.jupiter.execution.parallel.mode.classes.default>concurrent</junit.jupiter.execution.parallel.mode.classes.default>
+                                <junit.jupiter.execution.parallel.config.strategy>${camel.failsafe.parallel.strategy}</junit.jupiter.execution.parallel.config.strategy>
+                                <junit.jupiter.execution.parallel.config.dynamic.factor>${camel.failsafe.parallel.factor}</junit.jupiter.execution.parallel.config.dynamic.factor>
                             </systemPropertyVariables>
                         </configuration>
                         <executions>

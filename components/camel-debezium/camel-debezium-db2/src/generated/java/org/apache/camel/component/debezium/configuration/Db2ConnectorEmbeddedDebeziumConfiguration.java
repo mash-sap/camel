@@ -14,6 +14,10 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
     private static final String LABEL_NAME = "consumer,db2";
     @UriParam(label = LABEL_NAME)
     private String messageKeyColumns;
+    @UriParam(label = LABEL_NAME, defaultValue = "io.debezium.pipeline.txmetadata.DefaultTransactionMetadataFactory")
+    private String transactionMetadataFactory = "io.debezium.pipeline.txmetadata.DefaultTransactionMetadataFactory";
+    @UriParam(label = LABEL_NAME, defaultValue = "0ms", javaType = "java.time.Duration")
+    private long streamingDelayMs = 0;
     @UriParam(label = LABEL_NAME)
     private String customMetricTags;
     @UriParam(label = LABEL_NAME, defaultValue = "10000")
@@ -34,6 +38,8 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
     private int snapshotFetchSize;
     @UriParam(label = LABEL_NAME, defaultValue = "10s", javaType = "java.time.Duration")
     private long snapshotLockTimeoutMs = 10000;
+    @UriParam(label = LABEL_NAME, defaultValue = "ASNCDC")
+    private String cdcChangeTablesSchema = "ASNCDC";
     @UriParam(label = LABEL_NAME)
     private String databaseUser;
     @UriParam(label = LABEL_NAME)
@@ -48,6 +54,8 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
     private String snapshotSelectStatementOverrides;
     @UriParam(label = LABEL_NAME, defaultValue = "0ms", javaType = "java.time.Duration")
     private int heartbeatIntervalMs = 0;
+    @UriParam(label = LABEL_NAME, defaultValue = "false")
+    private boolean snapshotModeConfigurationBasedSnapshotOnSchemaError = false;
     @UriParam(label = LABEL_NAME, defaultValue = "false")
     private boolean schemaHistoryInternalSkipUnparseableDdl = false;
     @UriParam(label = LABEL_NAME)
@@ -69,6 +77,8 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
     private String topicNamingStrategy = "io.debezium.schema.SchemaTopicNamingStrategy";
     @UriParam(label = LABEL_NAME, defaultValue = "initial")
     private String snapshotMode = "initial";
+    @UriParam(label = LABEL_NAME, defaultValue = "false")
+    private boolean snapshotModeConfigurationBasedSnapshotData = false;
     @UriParam(label = LABEL_NAME, defaultValue = "8192")
     private int maxQueueSize = 8192;
     @UriParam(label = LABEL_NAME, defaultValue = "1024")
@@ -83,6 +93,8 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
     private boolean schemaHistoryInternalStoreOnlyCapturedTablesDdl = false;
     @UriParam(label = LABEL_NAME, defaultValue = "false")
     private boolean schemaHistoryInternalStoreOnlyCapturedDatabasesDdl = false;
+    @UriParam(label = LABEL_NAME, defaultValue = "false")
+    private boolean snapshotModeConfigurationBasedSnapshotOnDataError = false;
     @UriParam(label = LABEL_NAME)
     private String schemaHistoryInternalFileFilename;
     @UriParam(label = LABEL_NAME, defaultValue = "false")
@@ -94,12 +106,18 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
     private String decimalHandlingMode = "precise";
     @UriParam(label = LABEL_NAME, defaultValue = "io.debezium.connector.db2.Db2SourceInfoStructMaker")
     private String sourceinfoStructMaker = "io.debezium.connector.db2.Db2SourceInfoStructMaker";
+    @UriParam(label = LABEL_NAME, defaultValue = "ASNCDC")
+    private String cdcControlSchema = "ASNCDC";
     @UriParam(label = LABEL_NAME, defaultValue = "true")
     private boolean tableIgnoreBuiltin = true;
     @UriParam(label = LABEL_NAME)
     private String snapshotIncludeCollectionList;
+    @UriParam(label = LABEL_NAME, defaultValue = "false")
+    private boolean snapshotModeConfigurationBasedStartStream = false;
     @UriParam(label = LABEL_NAME, defaultValue = "0")
     private long maxQueueSizeInBytes = 0;
+    @UriParam(label = LABEL_NAME, defaultValue = "false")
+    private boolean snapshotModeConfigurationBasedSnapshotSchema = false;
     @UriParam(label = LABEL_NAME, defaultValue = "adaptive")
     private String timePrecisionMode = "adaptive";
     @UriParam(label = LABEL_NAME, defaultValue = "5s", javaType = "java.time.Duration")
@@ -114,6 +132,8 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
     private int databasePort = 50000;
     @UriParam(label = LABEL_NAME)
     private String notificationSinkTopicName;
+    @UriParam(label = LABEL_NAME)
+    private String snapshotModeCustomName;
     @UriParam(label = LABEL_NAME, defaultValue = "io.debezium.storage.kafka.history.KafkaSchemaHistory")
     private String schemaHistoryInternal = "io.debezium.storage.kafka.history.KafkaSchemaHistory";
     @UriParam(label = LABEL_NAME)
@@ -124,6 +144,8 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
     private String schemaNameAdjustmentMode = "none";
     @UriParam(label = LABEL_NAME)
     private String tableIncludeList;
+    @UriParam(label = LABEL_NAME, defaultValue = "LUW")
+    private String db2Platform = "LUW";
 
     /**
      * A semicolon-separated list of expressions that match fully-qualified
@@ -142,6 +164,29 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
 
     public String getMessageKeyColumns() {
         return messageKeyColumns;
+    }
+
+    /**
+     * Class to make transaction context & transaction struct/schemas
+     */
+    public void setTransactionMetadataFactory(String transactionMetadataFactory) {
+        this.transactionMetadataFactory = transactionMetadataFactory;
+    }
+
+    public String getTransactionMetadataFactory() {
+        return transactionMetadataFactory;
+    }
+
+    /**
+     * A delay period after the snapshot is completed and the streaming begins,
+     * given in milliseconds. Defaults to 0 ms.
+     */
+    public void setStreamingDelayMs(long streamingDelayMs) {
+        this.streamingDelayMs = streamingDelayMs;
+    }
+
+    public long getStreamingDelayMs() {
+        return streamingDelayMs;
     }
 
     /**
@@ -274,6 +319,18 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
     }
 
     /**
+     * The name of the schema where CDC change tables are located; defaults to
+     * 'ASNCDC'
+     */
+    public void setCdcChangeTablesSchema(String cdcChangeTablesSchema) {
+        this.cdcChangeTablesSchema = cdcChangeTablesSchema;
+    }
+
+    public String getCdcChangeTablesSchema() {
+        return cdcChangeTablesSchema;
+    }
+
+    /**
      * Name of the database user to be used when connecting to the database.
      */
     public void setDatabaseUser(String databaseUser) {
@@ -375,6 +432,20 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
 
     public int getHeartbeatIntervalMs() {
         return heartbeatIntervalMs;
+    }
+
+    /**
+     * When 'snapshot.mode' is set as configuration_based, this setting permits
+     * to specify whenever the schema should be snapshotted or not in case of
+     * error.
+     */
+    public void setSnapshotModeConfigurationBasedSnapshotOnSchemaError(
+            boolean snapshotModeConfigurationBasedSnapshotOnSchemaError) {
+        this.snapshotModeConfigurationBasedSnapshotOnSchemaError = snapshotModeConfigurationBasedSnapshotOnSchemaError;
+    }
+
+    public boolean isSnapshotModeConfigurationBasedSnapshotOnSchemaError() {
+        return snapshotModeConfigurationBasedSnapshotOnSchemaError;
     }
 
     /**
@@ -506,6 +577,19 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
     }
 
     /**
+     * When 'snapshot.mode' is set as configuration_based, this setting permits
+     * to specify whenever the data should be snapshotted or not.
+     */
+    public void setSnapshotModeConfigurationBasedSnapshotData(
+            boolean snapshotModeConfigurationBasedSnapshotData) {
+        this.snapshotModeConfigurationBasedSnapshotData = snapshotModeConfigurationBasedSnapshotData;
+    }
+
+    public boolean isSnapshotModeConfigurationBasedSnapshotData() {
+        return snapshotModeConfigurationBasedSnapshotData;
+    }
+
+    /**
      * Maximum size of the queue for change events read from the database log
      * but not yet recorded or forwarded. Defaults to 8192, and should always be
      * larger than the maximum batch size.
@@ -596,6 +680,20 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
     }
 
     /**
+     * When 'snapshot.mode' is set as configuration_based, this setting permits
+     * to specify whenever the data should be snapshotted or not in case of
+     * error.
+     */
+    public void setSnapshotModeConfigurationBasedSnapshotOnDataError(
+            boolean snapshotModeConfigurationBasedSnapshotOnDataError) {
+        this.snapshotModeConfigurationBasedSnapshotOnDataError = snapshotModeConfigurationBasedSnapshotOnDataError;
+    }
+
+    public boolean isSnapshotModeConfigurationBasedSnapshotOnDataError() {
+        return snapshotModeConfigurationBasedSnapshotOnDataError;
+    }
+
+    /**
      * The path to the file that will be used to record the database schema
      * history
      */
@@ -668,6 +766,18 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
     }
 
     /**
+     * The name of the schema where CDC control structures are located; defaults
+     * to 'ASNCDC'
+     */
+    public void setCdcControlSchema(String cdcControlSchema) {
+        this.cdcControlSchema = cdcControlSchema;
+    }
+
+    public String getCdcControlSchema() {
+        return cdcControlSchema;
+    }
+
+    /**
      * Flag specifying whether built-in tables should be ignored.
      */
     public void setTableIgnoreBuiltin(boolean tableIgnoreBuiltin) {
@@ -692,6 +802,19 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
     }
 
     /**
+     * When 'snapshot.mode' is set as configuration_based, this setting permits
+     * to specify whenever the stream should start or not after snapshot.
+     */
+    public void setSnapshotModeConfigurationBasedStartStream(
+            boolean snapshotModeConfigurationBasedStartStream) {
+        this.snapshotModeConfigurationBasedStartStream = snapshotModeConfigurationBasedStartStream;
+    }
+
+    public boolean isSnapshotModeConfigurationBasedStartStream() {
+        return snapshotModeConfigurationBasedStartStream;
+    }
+
+    /**
      * Maximum size of the queue in bytes for change events read from the
      * database log but not yet recorded or forwarded. Defaults to 0. Mean the
      * feature is not enabled
@@ -702,6 +825,19 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
 
     public long getMaxQueueSizeInBytes() {
         return maxQueueSizeInBytes;
+    }
+
+    /**
+     * When 'snapshot.mode' is set as configuration_based, this setting permits
+     * to specify whenever the schema should be snapshotted or not.
+     */
+    public void setSnapshotModeConfigurationBasedSnapshotSchema(
+            boolean snapshotModeConfigurationBasedSnapshotSchema) {
+        this.snapshotModeConfigurationBasedSnapshotSchema = snapshotModeConfigurationBasedSnapshotSchema;
+    }
+
+    public boolean isSnapshotModeConfigurationBasedSnapshotSchema() {
+        return snapshotModeConfigurationBasedSnapshotSchema;
     }
 
     /**
@@ -800,6 +936,20 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
     }
 
     /**
+     * When 'snapshot.mode' is set as custom, this setting must be set to
+     * specify a the name of the custom implementation provided in the 'name()'
+     * method. The implementations must implement the 'Snapshotter' interface
+     * and is called on each app boot to determine whether to do a snapshot.
+     */
+    public void setSnapshotModeCustomName(String snapshotModeCustomName) {
+        this.snapshotModeCustomName = snapshotModeCustomName;
+    }
+
+    public String getSnapshotModeCustomName() {
+        return snapshotModeCustomName;
+    }
+
+    /**
      * The name of the SchemaHistory class that should be used to store and
      * recover database schema changes. The configuration properties for the
      * history are prefixed with the 'schema.history.internal.' string.
@@ -862,11 +1012,26 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
         return tableIncludeList;
     }
 
+    /**
+     * Informs connector which Db2 implementation platform it is connected to.
+     * The default is 'LUW', which means Windows, UNIX, Linux. Using a value of
+     * 'Z' ensures that the Db2 for z/OS specific SQL statements are used.
+     */
+    public void setDb2Platform(String db2Platform) {
+        this.db2Platform = db2Platform;
+    }
+
+    public String getDb2Platform() {
+        return db2Platform;
+    }
+
     @Override
     protected Configuration createConnectorConfiguration() {
         final Configuration.Builder configBuilder = Configuration.create();
         
         addPropertyIfNotNull(configBuilder, "message.key.columns", messageKeyColumns);
+        addPropertyIfNotNull(configBuilder, "transaction.metadata.factory", transactionMetadataFactory);
+        addPropertyIfNotNull(configBuilder, "streaming.delay.ms", streamingDelayMs);
         addPropertyIfNotNull(configBuilder, "custom.metric.tags", customMetricTags);
         addPropertyIfNotNull(configBuilder, "query.fetch.size", queryFetchSize);
         addPropertyIfNotNull(configBuilder, "signal.enabled.channels", signalEnabledChannels);
@@ -877,6 +1042,7 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
         addPropertyIfNotNull(configBuilder, "heartbeat.topics.prefix", heartbeatTopicsPrefix);
         addPropertyIfNotNull(configBuilder, "snapshot.fetch.size", snapshotFetchSize);
         addPropertyIfNotNull(configBuilder, "snapshot.lock.timeout.ms", snapshotLockTimeoutMs);
+        addPropertyIfNotNull(configBuilder, "cdc.change.tables.schema", cdcChangeTablesSchema);
         addPropertyIfNotNull(configBuilder, "database.user", databaseUser);
         addPropertyIfNotNull(configBuilder, "database.dbname", databaseDbname);
         addPropertyIfNotNull(configBuilder, "datatype.propagate.source.type", datatypePropagateSourceType);
@@ -884,6 +1050,7 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
         addPropertyIfNotNull(configBuilder, "incremental.snapshot.watermarking.strategy", incrementalSnapshotWatermarkingStrategy);
         addPropertyIfNotNull(configBuilder, "snapshot.select.statement.overrides", snapshotSelectStatementOverrides);
         addPropertyIfNotNull(configBuilder, "heartbeat.interval.ms", heartbeatIntervalMs);
+        addPropertyIfNotNull(configBuilder, "snapshot.mode.configuration.based.snapshot.on.schema.error", snapshotModeConfigurationBasedSnapshotOnSchemaError);
         addPropertyIfNotNull(configBuilder, "schema.history.internal.skip.unparseable.ddl", schemaHistoryInternalSkipUnparseableDdl);
         addPropertyIfNotNull(configBuilder, "column.include.list", columnIncludeList);
         addPropertyIfNotNull(configBuilder, "column.propagate.source.type", columnPropagateSourceType);
@@ -894,6 +1061,7 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
         addPropertyIfNotNull(configBuilder, "skipped.operations", skippedOperations);
         addPropertyIfNotNull(configBuilder, "topic.naming.strategy", topicNamingStrategy);
         addPropertyIfNotNull(configBuilder, "snapshot.mode", snapshotMode);
+        addPropertyIfNotNull(configBuilder, "snapshot.mode.configuration.based.snapshot.data", snapshotModeConfigurationBasedSnapshotData);
         addPropertyIfNotNull(configBuilder, "max.queue.size", maxQueueSize);
         addPropertyIfNotNull(configBuilder, "incremental.snapshot.chunk.size", incrementalSnapshotChunkSize);
         addPropertyIfNotNull(configBuilder, "retriable.restart.connector.wait.ms", retriableRestartConnectorWaitMs);
@@ -901,14 +1069,18 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
         addPropertyIfNotNull(configBuilder, "provide.transaction.metadata", provideTransactionMetadata);
         addPropertyIfNotNull(configBuilder, "schema.history.internal.store.only.captured.tables.ddl", schemaHistoryInternalStoreOnlyCapturedTablesDdl);
         addPropertyIfNotNull(configBuilder, "schema.history.internal.store.only.captured.databases.ddl", schemaHistoryInternalStoreOnlyCapturedDatabasesDdl);
+        addPropertyIfNotNull(configBuilder, "snapshot.mode.configuration.based.snapshot.on.data.error", snapshotModeConfigurationBasedSnapshotOnDataError);
         addPropertyIfNotNull(configBuilder, "schema.history.internal.file.filename", schemaHistoryInternalFileFilename);
         addPropertyIfNotNull(configBuilder, "tombstones.on.delete", tombstonesOnDelete);
         addPropertyIfNotNull(configBuilder, "topic.prefix", topicPrefix);
         addPropertyIfNotNull(configBuilder, "decimal.handling.mode", decimalHandlingMode);
         addPropertyIfNotNull(configBuilder, "sourceinfo.struct.maker", sourceinfoStructMaker);
+        addPropertyIfNotNull(configBuilder, "cdc.control.schema", cdcControlSchema);
         addPropertyIfNotNull(configBuilder, "table.ignore.builtin", tableIgnoreBuiltin);
         addPropertyIfNotNull(configBuilder, "snapshot.include.collection.list", snapshotIncludeCollectionList);
+        addPropertyIfNotNull(configBuilder, "snapshot.mode.configuration.based.start.stream", snapshotModeConfigurationBasedStartStream);
         addPropertyIfNotNull(configBuilder, "max.queue.size.in.bytes", maxQueueSizeInBytes);
+        addPropertyIfNotNull(configBuilder, "snapshot.mode.configuration.based.snapshot.schema", snapshotModeConfigurationBasedSnapshotSchema);
         addPropertyIfNotNull(configBuilder, "time.precision.mode", timePrecisionMode);
         addPropertyIfNotNull(configBuilder, "signal.poll.interval.ms", signalPollIntervalMs);
         addPropertyIfNotNull(configBuilder, "post.processors", postProcessors);
@@ -916,11 +1088,13 @@ public class Db2ConnectorEmbeddedDebeziumConfiguration
         addPropertyIfNotNull(configBuilder, "event.processing.failure.handling.mode", eventProcessingFailureHandlingMode);
         addPropertyIfNotNull(configBuilder, "database.port", databasePort);
         addPropertyIfNotNull(configBuilder, "notification.sink.topic.name", notificationSinkTopicName);
+        addPropertyIfNotNull(configBuilder, "snapshot.mode.custom.name", snapshotModeCustomName);
         addPropertyIfNotNull(configBuilder, "schema.history.internal", schemaHistoryInternal);
         addPropertyIfNotNull(configBuilder, "column.exclude.list", columnExcludeList);
         addPropertyIfNotNull(configBuilder, "database.hostname", databaseHostname);
         addPropertyIfNotNull(configBuilder, "schema.name.adjustment.mode", schemaNameAdjustmentMode);
         addPropertyIfNotNull(configBuilder, "table.include.list", tableIncludeList);
+        addPropertyIfNotNull(configBuilder, "db2.platform", db2Platform);
         
         return configBuilder.build();
     }

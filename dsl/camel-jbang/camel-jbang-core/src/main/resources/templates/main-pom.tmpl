@@ -9,6 +9,7 @@
 
     <properties>
         <java.version>{{ .JavaVersion }}</java.version>
+{{ .BuildProperties }}
 {{ .CamelKubernetesProperties }}
     </properties>
 
@@ -48,17 +49,17 @@
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-api</artifactId>
-            <version>2.22.0</version>
+            <version>2.23.1</version>
         </dependency>
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-slf4j2-impl</artifactId>
-            <version>2.22.0</version>
+            <version>2.23.1</version>
         </dependency>
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-core</artifactId>
-            <version>2.22.0</version>
+            <version>2.23.1</version>
         </dependency>
 
         <dependency>
@@ -74,7 +75,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.12.1</version>
+                <version>3.13.0</version>
                 <configuration>
                     <source>${java.version}</source>
                     <target>${java.version}</target>
@@ -100,7 +101,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
-                <version>3.6.0</version>
+                <version>3.7.1</version>
                 <configuration>
                     <descriptors>
                         <descriptor>src/main/resources/assembly/runner.xml</descriptor>

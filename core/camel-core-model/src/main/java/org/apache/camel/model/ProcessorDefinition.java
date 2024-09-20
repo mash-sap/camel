@@ -78,7 +78,7 @@ import org.slf4j.Logger;
 @XmlAccessorType(XmlAccessType.FIELD)
 @SuppressWarnings("rawtypes")
 public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>> extends OptionalIdentifiedDefinition<Type>
-        implements Block {
+        implements Block, CopyableDefinition<ProcessorDefinition> {
     @XmlTransient
     private static final AtomicInteger COUNTER = new AtomicInteger();
     @XmlAttribute
@@ -100,6 +100,17 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
     protected ProcessorDefinition() {
         // every time we create a definition we should inc the counter
         index = COUNTER.getAndIncrement();
+    }
+
+    protected ProcessorDefinition(ProcessorDefinition source) {
+        super(source);
+        this.disabled = source.disabled;
+        this.inheritErrorHandler = source.inheritErrorHandler;
+        this.blocks.addAll(source.blocks);
+        this.parent = source.parent;
+        this.routeConfiguration = source.routeConfiguration;
+        this.interceptStrategies.addAll(source.interceptStrategies);
+        this.index = source.index;
     }
 
     private static <T extends ExpressionNode> ExpressionClause<T> createAndSetExpression(T result) {
@@ -422,7 +433,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      *
      * @return the builder
      */
-    @Deprecated
+    @Deprecated(since = "3.19.0")
     public ServiceCallDefinition serviceCall() {
         ServiceCallDefinition answer = new ServiceCallDefinition();
         addOutput(answer);
@@ -435,7 +446,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @param  name the service name
      * @return      the builder
      */
-    @Deprecated
+    @Deprecated(since = "3.19.0")
     public Type serviceCall(String name) {
         ServiceCallDefinition answer = new ServiceCallDefinition();
         answer.setName(name);
@@ -450,7 +461,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      * @param  uri  the endpoint uri to use for calling the service
      * @return      the builder
      */
-    @Deprecated
+    @Deprecated(since = "3.19.0")
     public Type serviceCall(String name, @AsEndpointUri String uri) {
         ServiceCallDefinition answer = new ServiceCallDefinition();
         answer.setName(name);
@@ -782,17 +793,9 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
             // set it on last output as this is what the user means to do
             // for Block(s) with non empty getOutputs() the id probably refers
             // to the last definition in the current Block
-            List<ProcessorDefinition<?>> outputs = getOutputs();
-            if (!blocks.isEmpty()) {
-                if (blocks.getLast() instanceof ProcessorDefinition) {
-                    ProcessorDefinition<?> block = (ProcessorDefinition<?>) blocks.getLast();
-                    if (!block.getOutputs().isEmpty()) {
-                        outputs = block.getOutputs();
-                    }
-                }
-            }
+            final List<ProcessorDefinition<?>> definitions = getProcessorDefinitions();
             if (!getOutputs().isEmpty()) {
-                outputs.get(outputs.size() - 1).setDisabled(disabled);
+                definitions.get(definitions.size() - 1).setDisabled(disabled);
             } else {
                 // the output could be empty
                 setDisabled(disabled);
@@ -800,6 +803,19 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
         }
 
         return asType();
+    }
+
+    private List<ProcessorDefinition<?>> getProcessorDefinitions() {
+        List<ProcessorDefinition<?>> outputs = getOutputs();
+        if (!blocks.isEmpty()) {
+            if (blocks.getLast() instanceof ProcessorDefinition) {
+                ProcessorDefinition<?> block = (ProcessorDefinition<?>) blocks.getLast();
+                if (!block.getOutputs().isEmpty()) {
+                    outputs = block.getOutputs();
+                }
+            }
+        }
+        return outputs;
     }
 
     /**
@@ -1037,8 +1053,8 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
         }
 
         // are we already a choice?
-        if (def instanceof ChoiceDefinition) {
-            return (ChoiceDefinition) def;
+        if (def instanceof ChoiceDefinition choiceDefinition) {
+            return choiceDefinition;
         }
 
         // okay end this and get back to the choice
@@ -1061,9 +1077,8 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
         ProcessorDefinition<?> def = this;
 
         // are we already a try?
-        if (def instanceof TryDefinition) {
+        if (def instanceof TryDefinition td) {
             // then we need special logic to end
-            TryDefinition td = (TryDefinition) def;
             return (TryDefinition) td.onEndDoTry();
         }
 
@@ -1081,8 +1096,8 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
         ProcessorDefinition<?> def = this;
 
         // are we already a doCatch?
-        if (def instanceof CatchDefinition) {
-            return (CatchDefinition) def;
+        if (def instanceof CatchDefinition catchDefinition) {
+            return catchDefinition;
         }
 
         // okay end this and get back to the try
@@ -1099,8 +1114,8 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
         ProcessorDefinition<?> def = this;
 
         // are we already a try?
-        if (def instanceof CircuitBreakerDefinition) {
-            return (CircuitBreakerDefinition) def;
+        if (def instanceof CircuitBreakerDefinition circuitBreakerDefinition) {
+            return circuitBreakerDefinition;
         }
 
         // okay end this and get back to the try
@@ -2339,8 +2354,8 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      */
     public Type bean(Object bean) {
         BeanDefinition answer = new BeanDefinition();
-        if (bean instanceof String) {
-            answer.setRef((String) bean);
+        if (bean instanceof String str) {
+            answer.setRef(str);
         } else {
             answer.setBean(bean);
         }
@@ -2370,8 +2385,7 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      */
     public Type bean(Object bean, String method) {
         BeanDefinition answer = new BeanDefinition();
-        if (bean instanceof String) {
-            String str = (String) bean;
+        if (bean instanceof String str) {
             if (str.startsWith("type:")) {
                 answer.setBeanType(str.substring(5));
             } else {
@@ -2420,8 +2434,8 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      */
     public Type bean(Object bean, BeanScope scope) {
         BeanDefinition answer = new BeanDefinition();
-        if (bean instanceof String) {
-            answer.setRef((String) bean);
+        if (bean instanceof String str) {
+            answer.setRef(str);
         } else {
             answer.setBean(bean);
         }
@@ -2441,8 +2455,8 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
      */
     public Type bean(Object bean, String method, BeanScope scope) {
         BeanDefinition answer = new BeanDefinition();
-        if (bean instanceof String) {
-            answer.setRef((String) bean);
+        if (bean instanceof String str) {
+            answer.setRef(str);
         } else {
             answer.setBean(bean);
         }
@@ -2704,6 +2718,18 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
         SetVariableDefinition answer = new SetVariableDefinition(name, clause);
         addOutput(answer);
         return clause;
+    }
+
+    /**
+     * Adds a processor which sets several variables on the exchange
+     *
+     * @param  variableNamesAndValues a sequence of variable names and values or a Map containing names and values
+     * @return                        the builder
+     */
+    public Type setVariables(Object... variableNamesAndValues) {
+        SetVariablesDefinition answer = new SetVariablesDefinition(variableNamesAndValues);
+        addOutput(answer);
+        return asType();
     }
 
     /**
@@ -3785,6 +3811,97 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
     }
 
     /**
+     * Polls a message from the given endpoint
+     *
+     * @param  uri the endpoint to poll from
+     * @return     the builder
+     */
+    public Type poll(@AsEndpointUri String uri) {
+        addOutput(new PollDefinition(uri));
+        return asType();
+    }
+
+    /**
+     * Polls a message from the given endpoint
+     *
+     * @param  uri     the endpoint to poll from
+     * @param  timeout timeout in millis when polling from the external service.
+     * @return         the builder
+     */
+    public Type poll(@AsEndpointUri String uri, long timeout) {
+        PollDefinition poll = new PollDefinition(uri);
+        poll.setTimeout(String.valueOf(timeout));
+        addOutput(poll);
+        return asType();
+    }
+
+    /**
+     * Polls a message from the given endpoint
+     *
+     * @param  endpoint the endpoint to poll from
+     * @return          the builder
+     */
+    public Type poll(Endpoint endpoint) {
+        addOutput(new PollDefinition(endpoint));
+        return asType();
+    }
+
+    /**
+     * Polls a message from the given endpoint
+     *
+     * @param  endpoint the endpoint to poll from
+     * @param  timeout  timeout in millis when polling from the external service.
+     * @return          the builder
+     */
+    public Type poll(Endpoint endpoint, long timeout) {
+        PollDefinition poll = new PollDefinition(endpoint);
+        poll.setTimeout(String.valueOf(timeout));
+        addOutput(poll);
+        return asType();
+    }
+
+    /**
+     * Polls a message from the given endpoint
+     *
+     * @param  endpoint the endpoint to poll from
+     * @return          the builder
+     */
+    public Type poll(@AsEndpointUri EndpointConsumerBuilder endpoint) {
+        addOutput(new PollDefinition(endpoint));
+        return asType();
+    }
+
+    /**
+     * Polls a message from the given endpoint
+     *
+     * @param  endpoint the endpoint to poll from
+     * @param  timeout  timeout in millis when polling from the external service.
+     * @return          the builder
+     */
+    public Type poll(@AsEndpointUri EndpointConsumerBuilder endpoint, long timeout) {
+        PollDefinition poll = new PollDefinition(endpoint);
+        poll.setTimeout(String.valueOf(timeout));
+        addOutput(poll);
+        return asType();
+    }
+
+    /**
+     * Polls a message from the given endpoint
+     *
+     * @param  uri             the endpoint to poll from
+     * @param  timeout         timeout in millis when polling from the external service.
+     * @param  variableReceive to use a variable to store the received message body (only body, not headers).
+     * @return                 the builder
+     */
+    public Type pollV(@AsEndpointUri String uri, long timeout, String variableReceive) {
+        PollDefinition poll = new PollDefinition(uri);
+        poll.setTimeout(String.valueOf(timeout));
+        poll.setVariableReceive(variableReceive);
+        addOutput(poll);
+        return asType();
+    }
+
+    /**
      * The <a href="http://camel.apache.org/content-enricher.html">Content Enricher EIP</a> enriches an exchange with
      * additional data obtained from a <code>resourceUri</code> using a {@link org.apache.camel.PollingConsumer} to poll
      * the endpoint.
@@ -4052,7 +4169,8 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
 
     /**
      * This enables pausable consumers, which allows the consumer to pause work until a certain condition allows it to
-     * resume operation
+     * resume operation. Please note that the check method is called only if the consumer has been paused due to an
+     * error on the routh.
      *
      * @param  consumerListener the consumer listener to use for consumer events
      * @return                  the builder
@@ -4067,7 +4185,8 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
 
     /**
      * This enables pausable consumers, which allows the consumer to pause work until a certain condition allows it to
-     * resume operation
+     * resume operation. Please note that the check method is called only if the consumer has been paused due to an
+     * error on the routh.
      *
      * @param  consumerListenerRef the resume strategy
      * @return                     the builder
@@ -4082,7 +4201,8 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
 
     /**
      * This enables pausable consumers, which allows the consumer to pause work until a certain condition allows it to
-     * resume operation
+     * resume operation. Please note that the check method is called only if the consumer has been paused due to an
+     * error on the routh.
      *
      * @param  consumerListenerRef the resume strategy
      * @return                     the builder
@@ -4092,6 +4212,18 @@ public abstract class ProcessorDefinition<Type extends ProcessorDefinition<Type>
         answer.setConsumerListener(consumerListenerRef);
         answer.setUntilCheck(untilCheck);
         addOutput(answer);
+        return asType();
+    }
+
+    /**
+     * This enables tokenization/chunking of blocks of text so that the elements of a message are separated in text
+     * segments as a composite message
+     *
+     * @param  tokenizerDefinition The tokenizer
+     * @return                     the builder
+     */
+    public Type tokenize(TokenizerDefinition tokenizerDefinition) {
+        addOutput(tokenizerDefinition);
         return asType();
     }
 

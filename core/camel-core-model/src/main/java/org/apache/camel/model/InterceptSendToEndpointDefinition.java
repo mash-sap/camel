@@ -47,8 +47,20 @@ public class InterceptSendToEndpointDefinition extends OutputDefinition<Intercep
     public InterceptSendToEndpointDefinition() {
     }
 
+    protected InterceptSendToEndpointDefinition(InterceptSendToEndpointDefinition source) {
+        super(source);
+        this.uri = source.uri;
+        this.skipSendToOriginalEndpoint = source.skipSendToOriginalEndpoint;
+        this.afterUri = source.afterUri;
+    }
+
     public InterceptSendToEndpointDefinition(String uri) {
         this.uri = uri;
+    }
+
+    @Override
+    public InterceptSendToEndpointDefinition copyDefinition() {
+        return new InterceptSendToEndpointDefinition(this);
     }
 
     @Override
@@ -137,27 +149,30 @@ public class InterceptSendToEndpointDefinition extends OutputDefinition<Intercep
         // interceptor
         ProcessorDefinition<?> first = getOutputs().get(0);
         if (first instanceof WhenDefinition && !(first instanceof WhenSkipSendToEndpointDefinition)) {
-            WhenDefinition when = (WhenDefinition) first;
-
-            // create a copy of when to use as replacement
-            WhenSkipSendToEndpointDefinition newWhen = new WhenSkipSendToEndpointDefinition();
-            newWhen.setExpression(when.getExpression());
-            newWhen.setId(when.getId());
-            newWhen.setInheritErrorHandler(when.isInheritErrorHandler());
-            newWhen.setParent(when.getParent());
-            newWhen.setDescription(when.getDescription());
-
-            // move this outputs to the when, expect the first one
-            // as the first one is the interceptor itself
-            for (int i = 1; i < outputs.size(); i++) {
-                ProcessorDefinition<?> out = outputs.get(i);
-                newWhen.addOutput(out);
-            }
+            final WhenSkipSendToEndpointDefinition newWhen = toWhenSkipSendToEndpointDefinition((WhenDefinition) first);
             // remove the moved from the original output, by just keeping the
             // first one
             clearOutput();
             outputs.add(newWhen);
         }
+    }
+
+    private WhenSkipSendToEndpointDefinition toWhenSkipSendToEndpointDefinition(WhenDefinition first) {
+        // create a copy of when to use as replacement
+        WhenSkipSendToEndpointDefinition newWhen = new WhenSkipSendToEndpointDefinition();
+        newWhen.setExpression(first.getExpression());
+        newWhen.setId(first.getId());
+        newWhen.setInheritErrorHandler(first.isInheritErrorHandler());
+        newWhen.setParent(first.getParent());
+        newWhen.setDescription(first.getDescription());
+
+        // move this outputs to the when, expect the first one
+        // as the first one is the interceptor itself
+        for (int i = 1; i < outputs.size(); i++) {
+            ProcessorDefinition<?> out = outputs.get(i);
+            newWhen.addOutput(out);
+        }
+        return newWhen;
     }
 
     public String getSkipSendToOriginalEndpoint() {
