@@ -1,0 +1,44 @@
+Subject: test
+From: Test Test <some@mail.com>
+To: Test Test <some@mail.com>
+Content-Type: multipart/mixed;
+	boundary="main-boundary"
+
+--main-boundary
+Content-Type: multipart/alternative;
+	boundary="the-mail-boundary"
+
+--the-mail-boundary
+Content-Type: text/plain; charset="utf-8"
+Content-Disposition: inline
+Content-Transfer-Encoding: quoted-printable
+
+Some text
+
+--the-mail-boundary
+Content-Transfer-Encoding: quoted-printable
+Content-Type: text/html; charset=UTF-8
+
+<html><head>
+<meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3Dutf-8">
+<style type=3D"text/css">.style1 {font-family: "Times New Roman";}</style>
+</head>
+<body>
+<div>Some Text</div>
+</body>
+</html>
+
+--the-mail-boundary--
+
+--main-boundary
+Content-Type: application/pdf; name==?utf-8?B?bmFtZS1m/HItYXR0YWNobWVudA==?=
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename==?utf-8?B?bmFtZS1m/HItYXR0YWNobWVudA==?=
+
+b20pXQovbi9Cb3JkuXIgWzAgMCAwXQovU3VidHlwZSAvTGluuwo+PgplbmRvYmoKNCAwIG9iago8
+b20pXQovbi9Cb3JkuXIgWzAgMCAwXQovU3VidHlwZSAvTGluuwo+PgplbmRvYmoKNCAwIG9iago8
+b20pXQovbi9Cb3JkuXIgWzAgMCAwXQovU3VidHlwZSAvTGluuwo+PgplbmRvYmoKNCAwIG9iago8
+b20pXQovbi9Cb3JkuXIgWzAgMCAwXQovU3VidHlwZSAvTGluuwo+PgplbmRvYmoKNCAwIG9iago8
+cmVQovbi9C3uiUlRU9GCg==
+
+--main-boundary--
